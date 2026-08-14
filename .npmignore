@@ -1,0 +1,22 @@
+# Source / build config (not shipped)
+src/
+.vscode/
+tsconfig.json
+tsup.config.ts
+node_modules/
+
+# Docs (English README.md is auto-included; keep repo-only docs out of the package)
+需求文档.md
+
+# Personal / sensitive
+skill-lock.json
+
+# Lock & env files
+pnpm-lock.yaml
+.npmrc
+.gitignore
+.DS_Store
+
+# Build artifacts
+*.log
+bin/*.map
