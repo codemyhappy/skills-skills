@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import readline from 'node:readline/promises';
@@ -60,13 +60,32 @@ function ensureDefaultSkill(skillsDir: string): void {
   log.success('已预置默认技能: skills-skills');
 }
 
+/** 在仓库根生成 skills-skills 使用指南（已存在则跳过） */
+function ensureGuide(repoRoot: string): void {
+  const guidePath = resolve(repoRoot, 'SKILLS-GUIDE.md');
+  if (pathExists(guidePath)) {
+    log.success('使用指南已存在: SKILLS-GUIDE.md');
+    return;
+  }
+
+  // 读取随 npm 包自带的使用指南模板，写入用户的 git 仓库
+  const templatePath = resolve(getPackageRoot(), 'SKILLS-GUIDE.md');
+  if (!pathExists(templatePath)) {
+    log.warn(`未找到内置使用指南模板: ${templatePath}，跳过生成`);
+    return;
+  }
+
+  writeFileSync(guidePath, readFileSync(templatePath, 'utf-8'));
+  log.success(`已生成使用指南: ${guidePath}`);
+}
+
 export async function setupCommand(options: { git?: string }) {
   const cwd = process.cwd();
   log.title('🚀 一键初始化 skills-skills');
   log.dim(`当前目录: ${cwd}`);
 
-  // 步骤 1/5: 定位或创建 skills 仓库
-  log.info('步骤 1/5: 定位 skills 仓库...');
+  // 步骤 1/6: 定位或创建 skills 仓库
+  log.info('步骤 1/6: 定位 skills 仓库...');
   let repoRoot: string;
 
   if (options.git) {
@@ -86,8 +105,8 @@ export async function setupCommand(options: { git?: string }) {
     repoRoot = cloneRepo(url, cwd);
   }
 
-  // 步骤 2/5: 确保 skills/ 目录存在
-  log.info('步骤 2/5: 检查 skills 目录...');
+  // 步骤 2/6: 确保 skills/ 目录存在
+  log.info('步骤 2/6: 检查 skills 目录...');
   const skillsDir = getSkillsDir(repoRoot);
   if (!pathExists(skillsDir)) {
     mkdirSync(skillsDir, { recursive: true });
@@ -96,22 +115,26 @@ export async function setupCommand(options: { git?: string }) {
     log.success(`skills/ 目录已存在: ${skillsDir}`);
   }
 
-  // 步骤 3/5: 预置默认 skills-skills 技能
-  log.info('步骤 3/5: 预置默认技能...');
+  // 步骤 3/6: 预置默认 skills-skills 技能
+  log.info('步骤 3/6: 预置默认技能...');
   ensureDefaultSkill(skillsDir);
+
+  // 步骤 4/6: 生成使用指南
+  log.info('步骤 4/6: 生成使用指南...');
+  ensureGuide(repoRoot);
 
   console.log();
 
-  // 步骤 4/5: 记录仓库根并同步 skill-lock.json 软链接
-  log.info('步骤 4/5: 记录仓库并同步 skill-lock.json...');
+  // 步骤 5/6: 记录仓库根并同步 skill-lock.json 软链接
+  log.info('步骤 5/6: 记录仓库并同步 skill-lock.json...');
   writeConfig({ repoRoot });
   log.success(`已记录 skills 仓库: ${repoRoot}`);
   await syncCommand({ restore: false });
 
   console.log();
 
-  // 步骤 5/5: 安装 skills 到当前设备
-  log.info('步骤 5/5: 安装手写 skills...');
+  // 步骤 6/6: 安装 skills 到当前设备
+  log.info('步骤 6/6: 安装手写 skills...');
   const skills = scanSkills(repoRoot);
   if (skills.length === 0) {
     log.warn('skills/ 目录下暂无技能，跳过安装');
