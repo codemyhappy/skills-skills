@@ -1,4 +1,5 @@
-import { copyFileSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs';
+import { copyFileSync, mkdirSync, realpathSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
   getAgentSkillLockPath,
   getRepoSKillLockPath,
@@ -27,6 +28,16 @@ export async function syncCommand(options: { restore?: boolean }) {
   return link(agentPath, repoPath);
 }
 
+/**
+ * 拷贝文件前先把源解析为真实文件（跟随软链接到原始目标）。
+ * skill-lock.json 可能已经是软链接，直接拷贝会得到链接本身而非原始内容，
+ * 因此统一先 realpath 解析，再拷贝原始文件。
+ */
+function copyResolved(src: string, dst: string): void {
+  const realSrc = isSymlink(src) ? realpathSync(src) : src;
+  copyFileSync(realSrc, dst);
+}
+
 /** 建立软链接: ~/.agents/.skill-lock.json → <repo>/skill-lock.json */
 async function link(agentPath: string, repoPath: string) {
   // 1. 确保仓库中存在 skill-lock.json：缺失时自动从 agent 侧补齐，无需用户手动拷贝
@@ -37,7 +48,7 @@ async function link(agentPath: string, repoPath: string) {
     }
     if (pathExists(agentPath)) {
       // agent 侧是普通文件 → 自动拷贝进仓库根目录
-      copyFileSync(agentPath, repoPath);
+      copyResolved(agentPath, repoPath);
       log.info('仓库中缺失 skill-lock.json，已自动从本地拷贝到仓库根目录');
     } else {
       // 两侧都没有 → 在仓库初始化一个空的 skill-lock.json，保证软链接可用
@@ -49,10 +60,13 @@ async function link(agentPath: string, repoPath: string) {
 
   const bakPath = agentPath + '.bak';
 
+  // 确保 agent 目录存在（如 ~/.agents），避免备份/创建软链接时 ENOENT
+  mkdirSync(dirname(agentPath), { recursive: true });
+
   // 2. 创建软链接前，先在 agent 目录备份一份仓库内容，
   //    防止 git 仓库被删除后软链接失效导致数据丢失
   if (!pathExists(bakPath)) {
-    copyFileSync(repoPath, bakPath);
+    copyResolved(repoPath, bakPath);
     log.info(`已在 agent 目录备份仓库内容: ${bakPath}`);
   }
 
@@ -75,7 +89,7 @@ async function link(agentPath: string, repoPath: string) {
   }
 
   // 5. agent 侧是普通文件 → 再次备份现有内容 → 删除 → 创建软链接
-  copyFileSync(agentPath, bakPath);
+  copyResolved(agentPath, bakPath);
   log.warn(`已备份现有文件内容到: ${bakPath}，即将以软链接替代`);
 
   unlinkSync(agentPath);
@@ -106,8 +120,8 @@ async function restore(agentPath: string, repoPath: string) {
 
   // 删除软链接
   unlinkSync(agentPath);
-  // 拷贝仓库文件到 agent 位置
-  copyFileSync(repoPath, agentPath);
+  // 拷贝仓库文件到 agent 位置（先解析软链接到真实文件）
+  copyResolved(repoPath, agentPath);
   log.success(`已恢复为普通文件: ${agentPath}`);
   log.info('仓库中的 skill-lock.json 保持不变');
 }

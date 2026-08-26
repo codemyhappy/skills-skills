@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
-import { realpathSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
@@ -100,8 +100,7 @@ export const log = {
 /** 检查路径是否为软链接 */
 export function isSymlink(p: string): boolean {
   try {
-    const stat = realpathSync(p);
-    return stat !== p;
+    return lstatSync(p).isSymbolicLink();
   } catch {
     return false;
   }
