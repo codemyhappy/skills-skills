@@ -32,8 +32,8 @@ program
 // ss init
 program
   .command('init')
-  .description('初始化 skills 仓库：复用当前 git 仓库或 clone 指定仓库到统一目录，并同步 skill-lock.json')
-  .argument('[url]', 'skills git 仓库地址（可选；当前目录在 git 内时复用当前仓库）')
+  .description('初始化 skills 仓库：clone 指定仓库到统一目录 ~/.config/skills-skills/sync-repo 并同步 skill-lock.json')
+  .argument('[url]', 'skills git 仓库地址')
   .action(async (url) => {
     await initCommand({ url });
   });

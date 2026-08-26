@@ -103,57 +103,42 @@ function ensureGuide(repoRoot: string): void {
 
 /**
  * ss init：初始化 skills 仓库（git 风格）。
- * 1) 当前目录在 git 项目内 → 复用该仓库（需含 skills/ 目录）；
- * 2) 否则提供 url（位置参数或交互询问）→ clone 到统一目录 ~/.config/skills-skills/sync-repo/<repoName>。
+ * 仓库统一存放在 ~/.config/skills-skills/sync-repo/<repoName>，与执行目录无关：
+ * 提供 url（位置参数或交互询问）→ clone 到统一目录；目标已存在且为 git 仓库则幂等复用。
  * 校验（只读）全部通过后才执行写入。
  */
 export async function initCommand(options: { url?: string }) {
-  const cwd = process.cwd();
   log.title('🚀 初始化 skills 仓库');
-  log.dim(`当前目录: ${cwd}`);
 
   // ═══ 校验段：只读、零副作用 ═══
   let repoRoot: string | null = null;
   let cloneUrl: string | null = null;
   let pendingRoot: string | null = null;
 
-  if (isInsideGitRepo(cwd)) {
-    // 当前目录在 git 项目内 → 复用该仓库
-    repoRoot = getGitRoot(cwd);
-    if (!pathExists(getSkillsDir(repoRoot))) {
-      log.error(`仓库 ${repoRoot} 中不存在 skills/ 目录，不符合复用标准，已中止。`);
-      log.error('复用以存在的 git 仓库需同时满足：1) 当前目录位于 git 仓库内；2) 仓库根下存在 skills/ 目录。');
-      log.error('请先在仓库中创建 skills/ 目录，或改用 ss init <仓库地址> 初始化。');
-      process.exit(1);
-    }
-    log.success(`检测到当前在 git 项目中，复用仓库: ${repoRoot}`);
-  } else {
-    // 不在 git 内 → 需要 clone
-    cloneUrl = (options.url?.trim() || (await promptGitUrl()).trim()) || null;
-    if (!cloneUrl) {
-      log.error('未提供 git 仓库地址，取消初始化');
-      process.exit(1);
-    }
+  cloneUrl = (options.url?.trim() || (await promptGitUrl()).trim()) || null;
+  if (!cloneUrl) {
+    log.error('未提供 git 仓库地址，取消初始化');
+    process.exit(1);
+  }
 
-    // 统一 clone 到 sync-repo/<repoName>
-    const repoName = repoNameFromUrl(cloneUrl);
-    pendingRoot = getRepoClonePath(repoName);
+  // 统一 clone 到 sync-repo/<repoName>（与执行目录无关）
+  const repoName = repoNameFromUrl(cloneUrl);
+  pendingRoot = getRepoClonePath(repoName);
 
-    if (pathExists(pendingRoot)) {
-      if (isInsideGitRepo(pendingRoot)) {
-        // 已存在且是 git 仓库 → 幂等复用，不再 clone
-        log.warn(`目标目录已存在且为 git 仓库，直接复用: ${pendingRoot}`);
-        repoRoot = pendingRoot;
-        cloneUrl = null;
-      } else {
-        log.error(`目标目录已存在但不是 git 仓库: ${pendingRoot}`);
-        log.error('请先移除该目录后重试。');
-        process.exit(1);
-      }
+  if (pathExists(pendingRoot)) {
+    if (isInsideGitRepo(pendingRoot)) {
+      // 已存在且是 git 仓库 → 幂等复用，不再 clone
+      log.warn(`目标目录已存在且为 git 仓库，直接复用: ${pendingRoot}`);
+      repoRoot = pendingRoot;
+      cloneUrl = null;
     } else {
-      // 校验远程仓库可访问（只读网络检查）
-      precheckRemote(cloneUrl);
+      log.error(`目标目录已存在但不是 git 仓库: ${pendingRoot}`);
+      log.error('请先移除该目录后重试。');
+      process.exit(1);
     }
+  } else {
+    // 校验远程仓库可访问（只读网络检查）
+    precheckRemote(cloneUrl);
   }
 
   log.success(`前置校验通过，目标仓库: ${repoRoot ?? pendingRoot}`);

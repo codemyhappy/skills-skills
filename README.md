@@ -10,7 +10,7 @@ Manage your handwritten skills and `skill-lock.json` in one place, so every devi
 
 ## Core Idea
 
-1. **Your own skills repo** — skills live in the `skills/` directory of a git repo *you* define. `ss init` reuses the current git project, or clones the repo URL into the unified directory `~/.config/skills-skills/sync-repo/`.
+1. **Your own skills repo** — skills live in the `skills/` directory of a git repo *you* define. `ss init <url>` clones the repo into the unified per-device directory `~/.config/skills-skills/sync-repo/` (idempotent: re-uses an existing clone), then creates `skills/` and pre-seeds the default `skills-skills` skill.
 2. **skill-lock.json as two real files** — a real file on this device (`~/.agents/.skill-lock.json`) and a version-controlled copy in the repo (`<repo>/skill-lock.json`). `ss` keeps them in sync with git-style `diff` / `merge` / `pull` / `push` three-way merge.
 
 ```
@@ -42,7 +42,7 @@ Daily use:
 
 | Command | Description |
 |---------|-------------|
-| `ss init [url]` | Initialize: reuse current git repo or clone `url` into `~/.config/skills-skills/sync-repo/`, then sync & install |
+| `ss init [url]` | Initialize: clone `url` into the unified `~/.config/skills-skills/sync-repo/` dir (idempotent), then sync & install |
 | `ss diff [--json]` | Compare local vs repo `skill-lock.json` (per-skill key semantics) |
 | `ss merge [--ours\|--theirs]` | Three-way merge local & repo (base = last sync); conflict aborts unless a side is forced |
 | `ss pull` | Copy repo `skill-lock.json` to local (auto backup before overwrite) |

@@ -10,7 +10,7 @@
 
 ## 核心思路
 
-1. **skills 仓库由你定义** —— skills 放在**你自己指定**的 git 仓库的 `skills/` 目录下。`ss init` 会复用当前 git 项目，或把指定仓库 clone 到统一目录 `~/.config/skills-skills/sync-repo/`。
+1. **skills 仓库由你定义** —— skills 放在**你自己指定**的 git 仓库的 `skills/` 目录下。`ss init <仓库地址>` 会把仓库 clone 到每台设备统一的目录 `~/.config/skills-skills/sync-repo/`（重复执行幂等复用），随后创建 `skills/` 并预置默认的 `skills-skills` 技能。
 2. **skill-lock.json 双真实文件** —— 本地一份真实文件（`~/.agents/.skill-lock.json`）+ 仓库一份受版本控制的文件（`<repo>/skill-lock.json`）。`ss` 用 git 风格的 `diff` / `merge` / `pull` / `push` 三方合并来保持两边一致。
 
 ```
@@ -42,7 +42,7 @@ ss init <你的仓库地址>
 
 | 命令 | 说明 |
 |------|------|
-| `ss init [url]` | 初始化：复用当前 git 仓库或把 `url` clone 到 `~/.config/skills-skills/sync-repo/`，随后同步并安装 |
+| `ss init [url]` | 初始化：把 `url` clone 到统一目录 `~/.config/skills-skills/sync-repo/`（幂等），随后同步并安装 |
 | `ss diff [--json]` | 比较本地与仓库的 `skill-lock.json`（按 skill key 语义对比） |
 | `ss merge [--ours\|--theirs]` | 三方合并本地与仓库（base = 上次同步基线）；有冲突默认中止，可用一侧强制解决 |
 | `ss pull` | 仓库 → 本地（覆盖前自动备份） |

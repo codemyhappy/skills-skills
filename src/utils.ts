@@ -61,14 +61,13 @@ export function getGitRoot(dir: string): string {
 
 /**
  * 解析当前 skills 仓库根目录：
- * 1) 优先使用本地 config 中记录的 repoRoot；
- * 2) 其次取当前工作目录所在 git 项目的根；
- * 3) 否则返回 null（需要先运行 ss init）。
+ * 仅读取本地 config 中记录的 repoRoot（由 ss init 写入，
+ * 统一位于 ~/.config/skills-skills/sync-repo/<repoName>，与执行目录无关）；
+ * 未初始化时返回 null（需要先运行 ss init）。
  */
-export function getRepoRoot(cwd: string): string | null {
+export function getRepoRoot(): string | null {
   const cfg = readConfig();
   if (cfg.repoRoot && existsSync(cfg.repoRoot)) return cfg.repoRoot;
-  if (isInsideGitRepo(cwd)) return getGitRoot(cwd);
   return null;
 }
 

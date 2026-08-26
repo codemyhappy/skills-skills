@@ -210,7 +210,7 @@ function mergeThreeWay(base: any, local: any, repo: any): MergeOutcome {
 
 /** 解析当前 skills 仓库根，找不到则报错退出 */
 function resolveRepoRoot(): string {
-  const repoRoot = getRepoRoot(process.cwd());
+  const repoRoot = getRepoRoot();
   if (!repoRoot) {
     log.error('未找到 skills 仓库，请先运行 ss init');
     process.exit(1);

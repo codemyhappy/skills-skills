@@ -11,7 +11,7 @@ interface SkillInfo {
 
 /** 解析当前 skills 仓库根，找不到则报错退出 */
 function resolveRepoRoot(): string {
-  const repoRoot = getRepoRoot(process.cwd());
+  const repoRoot = getRepoRoot();
   if (!repoRoot) {
     log.error('未找到 skills 仓库，请先运行 ss init');
     log.info('提示：在任意 git 目录执行 ss init，或使用 ss init <仓库地址>');
