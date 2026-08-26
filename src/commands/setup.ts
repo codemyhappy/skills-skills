@@ -88,13 +88,19 @@ export async function setupCommand(options: { git?: string }) {
   log.info('步骤 1/6: 定位 skills 仓库...');
   let repoRoot: string;
 
-  if (options.git) {
-    // 用户显式提供 git 地址 → clone
-    repoRoot = cloneRepo(options.git, cwd);
-  } else if (isInsideGitRepo(cwd)) {
-    // 当前目录在 git 项目内 → 复用该仓库
+  if (isInsideGitRepo(cwd)) {
+    // 当前目录在 git 项目内 → 一律复用该仓库（即便提供 --git 也先检查复用，避免在当前 git 仓库内嵌套 clone）
     repoRoot = getGitRoot(cwd);
+    if (!pathExists(getSkillsDir(repoRoot))) {
+      log.error(`仓库 ${repoRoot} 中不存在 skills/ 目录，不符合复用标准，已中止。`);
+      log.error('复用以存在的 git 仓库需同时满足：1) 当前目录位于 git 仓库内；2) 仓库根下存在 skills/ 目录。');
+      log.error('说明：即便提供 --git 地址，当前已在 git 项目内也不会直接 clone（避免嵌套 git 仓库），请先创建 skills/ 目录，或在非 git 目录下执行。');
+      process.exit(1);
+    }
     log.success(`检测到当前在 git 项目中，复用仓库: ${repoRoot}`);
+  } else if (options.git) {
+    // 不在任何 git 项目内，且用户显式提供 git 地址 → clone
+    repoRoot = cloneRepo(options.git, cwd);
   } else {
     // 不在 git 内 → 交互询问 git 地址并 clone
     const url = await promptGitUrl();

@@ -1,4 +1,4 @@
-import { copyFileSync, writeFileSync, unlinkSync, symlinkSync, renameSync } from 'node:fs';
+import { copyFileSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs';
 import {
   getAgentSkillLockPath,
   getRepoSKillLockPath,
@@ -47,27 +47,38 @@ async function link(agentPath: string, repoPath: string) {
     log.success(`skill-lock.json 已就绪: ${repoPath}`);
   }
 
-  // 2. 检查 agent 侧
+  const bakPath = agentPath + '.bak';
+
+  // 2. 创建软链接前，先在 agent 目录备份一份仓库内容，
+  //    防止 git 仓库被删除后软链接失效导致数据丢失
+  if (!pathExists(bakPath)) {
+    copyFileSync(repoPath, bakPath);
+    log.info(`已在 agent 目录备份仓库内容: ${bakPath}`);
+  }
+
+  // 3. 检查 agent 侧
   if (!pathExists(agentPath)) {
     // agent 侧文件不存在，直接创建软链接
     log.info(`创建软链接: ${agentPath} -> ${repoPath}`);
     symlinkSync(repoPath, agentPath);
     log.success('软链接创建成功');
+    log.dim(`备份文件保留在: ${bakPath}`);
     log.info('后续系统对 skill-lock.json 的修改将直接写入仓库');
     return;
   }
 
-  // 3. agent 侧已存在软链接，无需重复操作
+  // 4. agent 侧已存在软链接，无需重复操作
   if (isSymlink(agentPath)) {
     log.success('已存在软链接，无需重复操作');
+    log.dim(`备份文件保留在: ${bakPath}`);
     return;
   }
 
-  // 4. agent 侧是普通文件 → 备份 → 删除 → 创建软链接
-  const bakPath = agentPath + '.bak';
-  log.warn(`备份现有文件: ${agentPath} -> ${bakPath}`);
-  renameSync(agentPath, bakPath);
+  // 5. agent 侧是普通文件 → 再次备份现有内容 → 删除 → 创建软链接
+  copyFileSync(agentPath, bakPath);
+  log.warn(`已备份现有文件内容到: ${bakPath}，即将以软链接替代`);
 
+  unlinkSync(agentPath);
   log.info(`创建软链接: ${agentPath} -> ${repoPath}`);
   symlinkSync(repoPath, agentPath);
 
