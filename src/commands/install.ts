@@ -13,8 +13,8 @@ interface SkillInfo {
 function resolveRepoRoot(): string {
   const repoRoot = getRepoRoot(process.cwd());
   if (!repoRoot) {
-    log.error('未找到 skills 仓库，请先运行 ss setup');
-    log.info('提示：在任意 git 目录执行 ss setup，或使用 ss setup --git <地址>');
+    log.error('未找到 skills 仓库，请先运行 ss init');
+    log.info('提示：在任意 git 目录执行 ss init，或使用 ss init <仓库地址>');
     process.exit(1);
   }
   return repoRoot;

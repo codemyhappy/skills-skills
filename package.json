@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "setup": "node bin/ss.js setup",
+    "init": "node bin/ss.js init",
     "sync": "node bin/ss.js sync",
     "install:skills": "node bin/ss.js install"
   },

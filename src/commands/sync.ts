@@ -1,127 +1,450 @@
-import { copyFileSync, mkdirSync, realpathSync, writeFileSync, unlinkSync, symlinkSync } from 'node:fs';
-import { dirname } from 'node:path';
+import {
+  copyFileSync,
+  lstatSync,
+  mkdirSync,
+  realpathSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import {
   getAgentSkillLockPath,
   getRepoSKillLockPath,
   getRepoRoot,
   log,
-  isSymlink,
   pathExists,
+  readConfig,
+  readLastSync,
+  writeLastSync,
 } from '../utils.js';
 
-export async function syncCommand(options: { restore?: boolean }) {
-  const repoRoot = getRepoRoot(process.cwd());
-  if (!repoRoot) {
-    log.error('未找到 skills 仓库，请先运行 ss setup');
-    process.exit(1);
+// ── 时间戳与备份 ──────────────────────────────────────
+
+/** 生成 YYYY-MM-DD-HHmmss 时间戳（如 2026-08-26-160312） */
+function timestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+/** 生成目录下不冲突的时间戳备份路径 */
+function nextBackupPath(dir: string): string {
+  let p = resolve(dir, `skill-lock-${timestamp()}.json.ss.bak`);
+  for (let i = 1; pathExists(p); i++) {
+    p = resolve(dir, `skill-lock-${timestamp()}-${i}.json.ss.bak`);
   }
+  return p;
+}
 
-  const agentPath = getAgentSkillLockPath();
-  const repoPath = getRepoSKillLockPath(repoRoot);
-
-  log.title('🔗 skill-lock.json 同步');
-
-  if (options.restore) {
-    return restore(agentPath, repoPath);
+/** 拷贝文件前先把源解析为真实文件（跟随软链接到原始目标） */
+function copyResolved(src: string, dst: string): void {
+  let real = src;
+  try {
+    if (lstatSync(src).isSymbolicLink()) real = realpathSync(src);
+  } catch {
+    /* 源不存在等，交给 copyFileSync 抛错 */
   }
+  copyFileSync(real, dst);
+}
 
-  return link(agentPath, repoPath);
+/** 备份 src 到 dir 下（src 不存在则跳过），返回备份路径或 null */
+function backupFile(src: string, dir: string): string | null {
+  if (!pathExists(src)) return null;
+  mkdirSync(dir, { recursive: true });
+  const p = nextBackupPath(dir);
+  copyResolved(src, p);
+  return p;
 }
 
 /**
- * 拷贝文件前先把源解析为真实文件（跟随软链接到原始目标）。
- * skill-lock.json 可能已经是软链接，直接拷贝会得到链接本身而非原始内容，
- * 因此统一先 realpath 解析，再拷贝原始文件。
+ * 兼容旧版本：若 ~/.agents/.skill-lock.json 仍是软链接，则扁平化为真实文件。
+ * 软链接方案已废弃，这里仅做一次性迁移。
  */
-function copyResolved(src: string, dst: string): void {
-  const realSrc = isSymlink(src) ? realpathSync(src) : src;
-  copyFileSync(realSrc, dst);
+function flattenLegacySymlink(agentPath: string): void {
+  try {
+    if (!lstatSync(agentPath).isSymbolicLink()) return;
+    const real = realpathSync(agentPath);
+    mkdirSync(dirname(agentPath), { recursive: true });
+    const bak = backupFile(real, dirname(agentPath));
+    unlinkSync(agentPath);
+    copyFileSync(real, agentPath);
+    log.warn(
+      `检测到旧版软链接，已自动扁平化为真实文件${bak ? `（原内容备份: ${bak}）` : ''}`,
+    );
+  } catch {
+    /* 路径不存在等，忽略 */
+  }
 }
 
-/** 建立软链接: ~/.agents/.skill-lock.json → <repo>/skill-lock.json */
-async function link(agentPath: string, repoPath: string) {
-  // 1. 确保仓库中存在 skill-lock.json：缺失时自动从 agent 侧补齐，无需用户手动拷贝
-  if (!pathExists(repoPath)) {
-    if (isSymlink(agentPath)) {
-      log.error('agent 侧已是指向仓库的软链接，但仓库文件缺失，请先手动恢复');
-      process.exit(1);
+// ── skill-lock.json 读取与规范化 ──────────────────────
+
+/** 读取 lock JSON（解析失败返回 null） */
+function readLock(p: string): any | null {
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+/** diff 时忽略的时间戳字段（每次 install 都会变化，无实际意义） */
+const IGNORED_FIELDS = ['installedAt', 'updatedAt'];
+
+/** 规范化 skill 值：去掉时间戳字段，仅用于比较 */
+function normalizeSkill(value: any): any {
+  if (value === null || typeof value !== 'object') return value;
+  const copy: any = { ...value };
+  for (const f of IGNORED_FIELDS) delete copy[f];
+  return copy;
+}
+
+/** 规范化整个 lock：返回 { version, skills } 或 null */
+function normalizeLock(lock: any): { version: any; skills: Record<string, any> } | null {
+  if (!lock || typeof lock !== 'object') return null;
+  const skills: Record<string, any> = {};
+  const rawSkills = lock.skills ?? {};
+  if (rawSkills && typeof rawSkills === 'object') {
+    for (const [name, value] of Object.entries(rawSkills)) {
+      skills[name] = normalizeSkill(value);
     }
-    if (pathExists(agentPath)) {
-      // agent 侧是普通文件 → 自动拷贝进仓库根目录
-      copyResolved(agentPath, repoPath);
-      log.info('仓库中缺失 skill-lock.json，已自动从本地拷贝到仓库根目录');
-    } else {
-      // 两侧都没有 → 在仓库初始化一个空的 skill-lock.json，保证软链接可用
-      writeFileSync(repoPath, '{}\n');
-      log.warn('本地与仓库均无 skill-lock.json，已在仓库初始化空文件');
+  }
+  return { version: lock.version, skills };
+}
+
+function lockEquals(a: any, b: any): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// ── diff（key 级语义对比）─────────────────────────────
+
+interface DiffEntry {
+  type: '+' | '-' | 'M';
+  name: string;
+}
+
+/** 本地 vs 仓库差异：+ 仅本地新增、- 仅仓库存在（本地删除/未同步）、M 两边存在但不同 */
+function computeDiff(local: any, repo: any): DiffEntry[] {
+  const ln = normalizeLock(local) ?? { version: undefined, skills: {} };
+  const rn = normalizeLock(repo) ?? { version: undefined, skills: {} };
+  const names = new Set([...Object.keys(ln.skills), ...Object.keys(rn.skills)]);
+  const entries: DiffEntry[] = [];
+  for (const name of names) {
+    const hasL = name in ln.skills;
+    const hasR = name in rn.skills;
+    if (hasL && !hasR) entries.push({ type: '+', name });
+    else if (!hasL && hasR) entries.push({ type: '-', name });
+    else if (!lockEquals(ln.skills[name], rn.skills[name])) entries.push({ type: 'M', name });
+  }
+  return entries;
+}
+
+// ── 三方合并 ──────────────────────────────────────────
+
+interface MergeOutcome {
+  merged: any; // 合并结果（含原始字段，非规范化）
+  conflicts: string[];
+  versionConflict: boolean;
+}
+
+/**
+ * 三方合并：base = last-sync 镜像，ours = 本地，theirs = 仓库。
+ * 自动解决单向改动；双侧都改且不一致时记为冲突。
+ */
+function mergeThreeWay(base: any, local: any, repo: any): MergeOutcome {
+  const bn = normalizeLock(base) ?? { version: undefined, skills: {} };
+  const ln = normalizeLock(local) ?? { version: undefined, skills: {} };
+  const rn = normalizeLock(repo) ?? { version: undefined, skills: {} };
+  const skillsOut: Record<string, any> = {};
+  const conflicts: string[] = [];
+
+  const names = new Set([
+    ...Object.keys(bn.skills),
+    ...Object.keys(ln.skills),
+    ...Object.keys(rn.skills),
+  ]);
+
+  for (const name of names) {
+    const b = name in bn.skills ? bn.skills[name] : undefined;
+    const a = name in ln.skills ? ln.skills[name] : undefined;
+    const c = name in rn.skills ? rn.skills[name] : undefined;
+    const hasB = b !== undefined;
+    const hasA = a !== undefined;
+    const hasC = c !== undefined;
+
+    if (!hasA && !hasC) continue; // 两侧都删除
+
+    if (!hasB) {
+      // 新增：base 中不存在
+      if (hasA && !hasC) skillsOut[name] = local?.skills?.[name];
+      else if (!hasA && hasC) skillsOut[name] = repo?.skills?.[name];
+      else if (lockEquals(a, c)) skillsOut[name] = local?.skills?.[name];
+      else conflicts.push(name); // 两侧同时新增且不同
+      continue;
     }
-    log.success(`skill-lock.json 已就绪: ${repoPath}`);
+
+    // 已存在：base 中有
+    if (!hasA || !hasC) continue; // 任一侧删除 → 采用删除
+    if (lockEquals(a, c)) skillsOut[name] = local?.skills?.[name];
+    else if (lockEquals(a, b)) skillsOut[name] = repo?.skills?.[name];
+    else if (lockEquals(c, b)) skillsOut[name] = local?.skills?.[name];
+    else conflicts.push(name);
   }
 
-  const bakPath = agentPath + '.bak';
+  // version 字段：两侧不一致视为冲突，不自动选择
+  const versionConflict =
+    local?.version !== undefined &&
+    repo?.version !== undefined &&
+    local.version !== repo.version;
 
-  // 确保 agent 目录存在（如 ~/.agents），避免备份/创建软链接时 ENOENT
+  const merged: any = {
+    ...(local ?? repo ?? base ?? {}),
+    version: local?.version ?? repo?.version ?? base?.version,
+    skills: skillsOut,
+  };
+
+  return { merged, conflicts, versionConflict };
+}
+
+// ── 命令实现 ──────────────────────────────────────────
+
+/** 解析当前 skills 仓库根，找不到则报错退出 */
+function resolveRepoRoot(): string {
+  const repoRoot = getRepoRoot(process.cwd());
+  if (!repoRoot) {
+    log.error('未找到 skills 仓库，请先运行 ss init');
+    process.exit(1);
+  }
+  return repoRoot;
+}
+
+/** 拉取：仓库 → 本地真实文件（写前备份本地） */
+export async function pullCommand(): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  const agentPath = getAgentSkillLockPath();
+  const repoPath = getRepoSKillLockPath(repoRoot);
+
+  flattenLegacySymlink(agentPath);
+
+  if (!pathExists(repoPath)) {
+    log.error(`仓库中不存在 skill-lock.json: ${repoPath}`);
+    process.exit(1);
+  }
+
   mkdirSync(dirname(agentPath), { recursive: true });
+  const bak = backupFile(agentPath, dirname(agentPath));
+  copyResolved(repoPath, agentPath);
 
-  // 2. 创建软链接前，先在 agent 目录备份一份仓库内容，
-  //    防止 git 仓库被删除后软链接失效导致数据丢失
-  if (!pathExists(bakPath)) {
-    copyResolved(repoPath, bakPath);
-    log.info(`已在 agent 目录备份仓库内容: ${bakPath}`);
-  }
+  const content = readLock(repoPath);
+  if (content) writeLastSync(content);
 
-  // 3. 检查 agent 侧
-  if (!pathExists(agentPath)) {
-    // agent 侧文件不存在，直接创建软链接
-    log.info(`创建软链接: ${agentPath} -> ${repoPath}`);
-    symlinkSync(repoPath, agentPath);
-    log.success('软链接创建成功');
-    log.dim(`备份文件保留在: ${bakPath}`);
-    log.info('后续系统对 skill-lock.json 的修改将直接写入仓库');
-    return;
-  }
-
-  // 4. agent 侧已存在软链接，无需重复操作
-  if (isSymlink(agentPath)) {
-    log.success('已存在软链接，无需重复操作');
-    log.dim(`备份文件保留在: ${bakPath}`);
-    return;
-  }
-
-  // 5. agent 侧是普通文件 → 再次备份现有内容 → 删除 → 创建软链接
-  copyResolved(agentPath, bakPath);
-  log.warn(`已备份现有文件内容到: ${bakPath}，即将以软链接替代`);
-
-  unlinkSync(agentPath);
-  log.info(`创建软链接: ${agentPath} -> ${repoPath}`);
-  symlinkSync(repoPath, agentPath);
-
-  log.success('软链接创建成功');
-  log.dim(`备份文件保留在: ${bakPath}`);
-  log.info('后续系统对 skill-lock.json 的修改将直接写入仓库');
+  log.success(`已拉取仓库 skill-lock.json 到本地${bak ? `（原文件备份: ${bak}）` : ''}`);
 }
 
-/** 取消软链接，恢复为普通文件 */
-async function restore(agentPath: string, repoPath: string) {
+/** 推送：本地 → 仓库真实文件（写前备份仓库），随后提示 git 提交 */
+export async function pushCommand(): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  const agentPath = getAgentSkillLockPath();
+  const repoPath = getRepoSKillLockPath(repoRoot);
+
+  flattenLegacySymlink(agentPath);
+
   if (!pathExists(agentPath)) {
-    log.error(`软链接不存在: ${agentPath}`);
+    log.error(`本地不存在 skill-lock.json: ${agentPath}`);
     process.exit(1);
   }
 
-  if (!isSymlink(agentPath)) {
-    log.warn('当前不是软链接，无需恢复');
+  mkdirSync(dirname(repoPath), { recursive: true });
+  const bak = backupFile(repoPath, dirname(agentPath));
+  copyResolved(agentPath, repoPath);
+
+  const content = readLock(agentPath);
+  if (content) writeLastSync(content);
+
+  log.success(`已推送本地 skill-lock.json 到仓库${bak ? `（原仓库文件备份: ${bak}）` : ''}`);
+  log.info('提示：请执行 git add skill-lock.json && git commit && git push 将变更同步到远端');
+}
+
+/**
+ * 三方合并并写回本地与仓库。
+ * 返回 'merged' | 'conflict' | 'noop'；冲突时默认不写任何文件。
+ */
+export async function mergeImpl(
+  repoRoot: string,
+  options: { ours?: boolean; theirs?: boolean },
+): Promise<'merged' | 'conflict' | 'noop'> {
+  const agentPath = getAgentSkillLockPath();
+  const repoPath = getRepoSKillLockPath(repoRoot);
+
+  flattenLegacySymlink(agentPath);
+
+  // 一侧缺失 → 等价 pull / push
+  if (!pathExists(agentPath)) {
+    await pullCommand();
+    return 'merged';
+  }
+  if (!pathExists(repoPath)) {
+    await pushCommand();
+    return 'merged';
+  }
+
+  const local = readLock(agentPath);
+  const repo = readLock(repoPath);
+
+  // 无差异（忽略时间戳字段）
+  if (computeDiff(local, repo).length === 0) {
+    log.success('本地与仓库已一致，无需合并');
+    return 'noop';
+  }
+
+  const force = options.ours ? 'ours' : options.theirs ? 'theirs' : null;
+  const base = readLastSync();
+  const result = mergeThreeWay(base, local, repo);
+
+  const conflicts = [...result.conflicts];
+  if (result.versionConflict) conflicts.push('(顶层 version 字段不一致)');
+
+  if (conflicts.length > 0 && !force) {
+    log.error('合并存在冲突，未做任何修改：');
+    for (const name of conflicts) log.error(`  ✖ ${name}`);
+    log.info('请运行 ss merge --ours / ss merge --theirs 选择一侧，或手动编辑后重试。');
+    return 'conflict';
+  }
+
+  // 强制选侧时解决冲突
+  if (conflicts.length > 0) {
+    if (result.versionConflict && force === 'ours') result.merged.version = local?.version;
+    if (result.versionConflict && force === 'theirs') result.merged.version = repo?.version;
+    for (const name of result.conflicts) {
+      result.merged.skills[name] =
+        force === 'ours' ? local?.skills?.[name] : repo?.skills?.[name];
+    }
+    log.warn(`冲突已按 --${force} 解决`);
+  }
+
+  // 写回本地与仓库（先各自备份）
+  mkdirSync(dirname(agentPath), { recursive: true });
+  backupFile(agentPath, dirname(agentPath));
+  backupFile(repoPath, dirname(agentPath));
+  writeFileSync(agentPath, JSON.stringify(result.merged, null, 2) + '\n');
+  writeFileSync(repoPath, JSON.stringify(result.merged, null, 2) + '\n');
+  writeLastSync(result.merged);
+
+  log.success('合并完成，已写回本地与仓库');
+  log.info('提示：若仓库内容有变更，请执行 git add skill-lock.json && git commit && git push');
+  return 'merged';
+}
+
+/** ss merge：三方合并命令 */
+export async function mergeCommand(options: { ours?: boolean; theirs?: boolean }): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  log.title('🔀 skill-lock.json 三方合并');
+  const result = await mergeImpl(repoRoot, options);
+  if (result === 'conflict') process.exit(1);
+}
+
+/** ss sync：便捷同步，等价 merge */
+export async function syncCommand(): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  log.title('🔄 skill-lock.json 同步');
+  const result = await mergeImpl(repoRoot, {});
+  if (result === 'conflict') process.exit(1);
+}
+
+/** ss diff：key 级语义对比 */
+export async function diffCommand(options: { json?: boolean }): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  const agentPath = getAgentSkillLockPath();
+  const repoPath = getRepoSKillLockPath(repoRoot);
+
+  flattenLegacySymlink(agentPath);
+
+  const local = readLock(agentPath);
+  const repo = readLock(repoPath);
+
+  if (options.json) {
+    console.log(JSON.stringify(computeDiff(local, repo), null, 2));
     return;
   }
 
-  if (!pathExists(repoPath)) {
-    log.error(`仓库中 skill-lock.json 不存在，无法恢复`);
-    process.exit(1);
+  log.title('skill-lock.json 差异（本地 vs 仓库）');
+  const entries = computeDiff(local, repo);
+  if (entries.length === 0) {
+    log.success('无差异，本地与仓库一致');
+    return;
+  }
+  for (const e of entries) {
+    if (e.type === '+') log.info(`  + ${e.name}  （仅本地）`);
+    else if (e.type === '-') log.info(`  - ${e.name}  （仅仓库）`);
+    else log.warn(`  M ${e.name}  （两边存在但内容不同）`);
+  }
+  console.log();
+  log.info('运行 ss merge 自动合并，或 ss pull / ss push 强制覆盖。');
+}
+
+/** ss status：同步状态摘要 */
+export async function statusCommand(): Promise<void> {
+  const repoRoot = resolveRepoRoot();
+  const cfg = readConfig();
+  const agentPath = getAgentSkillLockPath();
+  const repoPath = getRepoSKillLockPath(repoRoot);
+
+  flattenLegacySymlink(agentPath);
+
+  const local = readLock(agentPath);
+  const repo = readLock(repoPath);
+
+  log.title('📋 skills 同步状态');
+  log.info(`仓库根目录: ${repoRoot}`);
+  if (cfg.remoteUrl) log.info(`远端地址: ${cfg.remoteUrl}`);
+  log.info(`本地文件: ${pathExists(agentPath) ? agentPath : '（不存在）'}`);
+  log.info(`仓库文件: ${pathExists(repoPath) ? repoPath : '（不存在）'}`);
+
+  const entries = computeDiff(local, repo);
+  if (!pathExists(agentPath)) {
+    log.warn('本地尚未有 skill-lock.json，运行 ss pull 拉取');
+  } else if (!pathExists(repoPath)) {
+    log.warn('仓库尚未有 skill-lock.json，运行 ss push 推送');
+  } else if (entries.length === 0) {
+    log.success('状态：已同步，无差异');
+  } else {
+    log.warn(`状态：存在 ${entries.length} 处差异（ss diff 查看，ss merge 合并）`);
+  }
+}
+
+/**
+ * init 结尾的自动同步：按两文件有无情况选择 pull/push/初始化/合并。
+ * 不退出进程（init 即使遇冲突也继续完成）。
+ */
+export async function syncSkillLock(repoRoot: string): Promise<void> {
+  const agentPath = getAgentSkillLockPath();
+  const repoPath = getRepoSKillLockPath(repoRoot);
+
+  flattenLegacySymlink(agentPath);
+
+  const hasLocal = pathExists(agentPath);
+  const hasRepo = pathExists(repoPath);
+
+  if (!hasLocal && !hasRepo) {
+    mkdirSync(dirname(agentPath), { recursive: true });
+    writeFileSync(agentPath, '{}\n');
+    log.warn('本地与仓库均无 skill-lock.json，已在本地初始化空文件');
+    return;
+  }
+  if (!hasLocal) {
+    await pullCommand();
+    return;
+  }
+  if (!hasRepo) {
+    await pushCommand();
+    return;
   }
 
-  // 删除软链接
-  unlinkSync(agentPath);
-  // 拷贝仓库文件到 agent 位置（先解析软链接到真实文件）
-  copyResolved(repoPath, agentPath);
-  log.success(`已恢复为普通文件: ${agentPath}`);
-  log.info('仓库中的 skill-lock.json 保持不变');
+  const local = readLock(agentPath);
+  const repo = readLock(repoPath);
+  if (computeDiff(local, repo).length === 0) {
+    log.success('skill-lock.json 本地与仓库已一致');
+    return;
+  }
+  await mergeImpl(repoRoot, {});
 }

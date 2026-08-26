@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
-import { realpathSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { realpathSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
@@ -20,6 +20,10 @@ const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 export interface Config {
   /** 用户自定义的 skills 仓库根目录 */
   repoRoot?: string;
+  /** 远端仓库地址（init 时记录，用于提示 push/pull） */
+  remoteUrl?: string;
+  /** 仓库目录名（clone 到 sync-repo/<repoName>） */
+  repoName?: string;
 }
 
 /** 读取本地配置 */
@@ -59,7 +63,7 @@ export function getGitRoot(dir: string): string {
  * 解析当前 skills 仓库根目录：
  * 1) 优先使用本地 config 中记录的 repoRoot；
  * 2) 其次取当前工作目录所在 git 项目的根；
- * 3) 否则返回 null（需要先运行 ss setup）。
+ * 3) 否则返回 null（需要先运行 ss init）。
  */
 export function getRepoRoot(cwd: string): string | null {
   const cfg = readConfig();
@@ -84,6 +88,42 @@ export function getSkillsDir(repoRoot: string): string {
   return resolve(repoRoot, 'skills');
 }
 
+/** 从仓库 URL 中提取目录名（如 https://gitee.com/a/b.git → b） */
+export function repoNameFromUrl(url: string): string {
+  const cleaned = url.replace(/\.git$/, '').replace(/\/$/, '');
+  return cleaned.split('/').pop() || 'skills';
+}
+
+/** 统一 clone 目录：~/.config/skills-skills/sync-repo */
+export function getSyncDir(): string {
+  return join(CONFIG_DIR, 'sync-repo');
+}
+
+/** 指定仓库 clone 后的目录：sync-repo/<repoName> */
+export function getRepoClonePath(repoName: string): string {
+  return resolve(getSyncDir(), repoName);
+}
+
+/** 三方合并基线 last-sync.json 的绝对路径 */
+export function getLastSyncPath(): string {
+  return join(CONFIG_DIR, 'last-sync.json');
+}
+
+/** 读取三方合并基线（上次 pull/push/merge 后的 skill-lock 镜像） */
+export function readLastSync(): any | null {
+  try {
+    return JSON.parse(readFileSync(getLastSyncPath(), 'utf-8')) as any;
+  } catch {
+    return null;
+  }
+}
+
+/** 写入三方合并基线 */
+export function writeLastSync(lock: any): void {
+  mkdirSync(CONFIG_DIR, { recursive: true });
+  writeFileSync(getLastSyncPath(), JSON.stringify(lock, null, 2) + '\n');
+}
+
 // ── 日志工具 ──────────────────────────────────────────
 
 export const log = {
@@ -96,15 +136,6 @@ export const log = {
 };
 
 // ── 文件系统工具 ──────────────────────────────────────
-
-/** 检查路径是否为软链接 */
-export function isSymlink(p: string): boolean {
-  try {
-    return lstatSync(p).isSymbolicLink();
-  } catch {
-    return false;
-  }
-}
 
 /** 检查路径是否存在 */
 export function pathExists(p: string): boolean {

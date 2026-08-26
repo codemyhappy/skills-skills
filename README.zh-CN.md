@@ -10,11 +10,14 @@
 
 ## 核心思路
 
-1. **skills 仓库由你定义** —— skills 放在**你自己指定**的 git 仓库的 `skills/` 目录下。`ss setup` 会检测当前 git 项目，或按你提供的地址 clone；随后创建 `skills/` 并预置默认的 `skills-skills` 技能。
-2. **skill-lock.json 用软链接同步** —— 将 `~/.agents/.skill-lock.json` 软链接到该仓库的 `skill-lock.json`，系统读写都直接落到仓库里，提交后其他设备 pull 即同步。
+1. **skills 仓库由你定义** —— skills 放在**你自己指定**的 git 仓库的 `skills/` 目录下。`ss init` 会复用当前 git 项目，或把指定仓库 clone 到统一目录 `~/.config/skills-skills/sync-repo/`。
+2. **skill-lock.json 双真实文件** —— 本地一份真实文件（`~/.agents/.skill-lock.json`）+ 仓库一份受版本控制的文件（`<repo>/skill-lock.json`）。`ss` 用 git 风格的 `diff` / `merge` / `pull` / `push` 三方合并来保持两边一致。
 
 ```
-~/.agents/.skill-lock.json  ──(软链接)──>  <repo>/skill-lock.json
+   ss push                     git push
+本地 ────────►  <repo>/skill-lock.json ────────►  远端
+本地 ◄────────  <repo>/skill-lock.json ◄────────  远端
+   ss pull                     git pull
 ```
 
 ---
@@ -31,42 +34,48 @@ npm install -g skills-skills   # 同时提供 ss / skills-skills 两个命令
 ## 快速开始
 
 ```bash
-# 一键初始化：定位/创建你的 skills 仓库 + 同步软链接 + 安装所有手写 skills
-ss setup
+# 复用当前 git 仓库，或把给定仓库地址 clone 到统一 sync-repo 目录
+ss init <你的仓库地址>
 ```
 
 日常使用：
 
 | 命令 | 说明 |
 |------|------|
-| `ss sync` | 将 `~/.agents/.skill-lock.json` 软链接到本仓库 |
-| `ss sync --restore` | 取消软链接，恢复为普通文件 |
-| `ss install` | 安装所有手写 skills |
-| `ss install <name>` | 安装指定 skill |
-| `ss install --dry-run` | 预览模式，只列不装 |
+| `ss init [url]` | 初始化：复用当前 git 仓库或把 `url` clone 到 `~/.config/skills-skills/sync-repo/`，随后同步并安装 |
+| `ss diff [--json]` | 比较本地与仓库的 `skill-lock.json`（按 skill key 语义对比） |
+| `ss merge [--ours\|--theirs]` | 三方合并本地与仓库（base = 上次同步基线）；有冲突默认中止，可用一侧强制解决 |
+| `ss pull` | 仓库 → 本地（覆盖前自动备份） |
+| `ss push` | 本地 → 仓库（覆盖前自动备份），随后自行 `git commit` / `git push` |
+| `ss sync` | 自动三方合并（等价 `ss merge`） |
+| `ss status` | 查看同步状态摘要 |
+| `ss install [<name>]` | 安装所有（或指定）手写 skill |
 | `ss list` | 列出所有手写 skills |
 | `ss -V` | 版本号 |
 
 > `ss install` 内部执行 `npx skills add <绝对路径>`。
+> `installedAt` / `updatedAt` 这两个时间戳字段在 diff/merge 中默认忽略，避免每次 install 都产生差异。
 
 ---
 
-## 添加新手写 skill
+## 三方合并原理
 
-```bash
-# 1. 在 skills/ 下创建目录并编写 SKILL.md（含 frontmatter）
-mkdir -p skills/my-skill
+合并基线为上次同步后的快照，保存在 `~/.config/skills-skills/last-sync.json`。
 
-# 2. 安装到本地设备
-ss install my-skill
+对每个 skill key：
 
-# 3. 提交同步
-git add .
-git commit -m "feat: add my-skill"
-git push
-```
+| base | 本地 | 仓库 | 结果 |
+|---|---|---|---|
+| 无 | 新增 | 无 | 保留本地 |
+| 无 | 无 | 新增 | 保留仓库 |
+| 存在 | 删除 | 存在 | 删除 |
+| 存在 | 存在 | 删除 | 删除 |
+| 存在 | 改动 | 未动 | 取仓库 |
+| 存在 | 未动 | 改动 | 取本地 |
+| 存在 | 改动 | 改动 | **冲突** |
+| 无 | 新增 | 新增且不同 | **冲突** |
 
-每台设备安装后执行一次 `ss setup` 即可恢复完整环境。
+冲突时 `ss merge` 不写任何文件并列出冲突 key，可用 `--ours` / `--theirs` 或手动编辑解决。
 
 ---
 
@@ -77,9 +86,15 @@ skills-skills/
 ├── ss / skills-skills    # CLI 命令
 ├── skills/               # 手写 skills 存放目录
 │   └── <name>/SKILL.md
-├── skill-lock.json       # 设备同步的锁文件（软链接目标）
 ├── src/                  # CLI 源码（TypeScript + tsup 打包）
 └── package.json
+
+~/.config/skills-skills/
+├── config.json           # repoRoot / remoteUrl / repoName
+├── last-sync.json        # 三方合并基线
+└── sync-repo/<repoName>/ # ss init <url> 的统一 clone 目录
+
+~/.agents/.skill-lock.json # 本工具维护的本地真实锁文件
 ```
 
 ---
@@ -90,12 +105,11 @@ skills-skills/
 pnpm dev     # 实时打包（tsup --watch）
 ```
 
-VS Code 中 F5 → 选择 "Debug ss (tsx)" 即可直接调试 TypeScript 源码，内置 sync / setup / install / list 多组调试配置。
+VS Code 中 F5 → 选择 "Debug ss (tsx)" 即可直接调试 TypeScript 源码，内置 sync / install / list 调试配置。
 
 ---
 
 ## 注意事项
 
 - `skill-lock.json` 含本地路径信息，建议仓库设为 **私有**。
-- 软链接在 macOS / Linux 原生支持，Windows 需管理员权限或开发者模式。
 - 依赖 `npx skills`（OpenCLI 生态提供），请确保设备已安装相关工具。

@@ -3,9 +3,16 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { syncCommand } from './commands/sync.js';
+import {
+  syncCommand,
+  diffCommand,
+  mergeCommand,
+  pullCommand,
+  pushCommand,
+  statusCommand,
+} from './commands/sync.js';
 import { installCommand, listCommand } from './commands/install.js';
-import { setupCommand } from './commands/setup.js';
+import { initCommand } from './commands/init.js';
 
 // ── 读取 package.json 获取版本号 ──────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -22,13 +29,64 @@ program
   .version(pkg.version, '-V, --version', '输出版本号')
   .addHelpCommand('help [command]', '显示帮助信息');
 
+// ss init
+program
+  .command('init')
+  .description('初始化 skills 仓库：复用当前 git 仓库或 clone 指定仓库到统一目录，并同步 skill-lock.json')
+  .argument('[url]', 'skills git 仓库地址（可选；当前目录在 git 内时复用当前仓库）')
+  .action(async (url) => {
+    await initCommand({ url });
+  });
+
 // ss sync
 program
   .command('sync')
-  .description('将 ~/.agents/.skill-lock.json 软链接到本仓库')
-  .option('--restore', '取消软链接，恢复为普通文件')
+  .description('同步本地与仓库的 skill-lock.json（自动三方合并）')
+  .action(async () => {
+    await syncCommand();
+  });
+
+// ss diff
+program
+  .command('diff')
+  .description('比较本地与仓库的 skill-lock.json')
+  .option('--json', '以 JSON 输出差异（脚本可读）')
   .action(async (options) => {
-    await syncCommand(options);
+    await diffCommand({ json: options.json });
+  });
+
+// ss merge
+program
+  .command('merge')
+  .description('三方合并本地与仓库的 skill-lock.json')
+  .option('--ours', '冲突时取本地版本')
+  .option('--theirs', '冲突时取仓库版本')
+  .action(async (options) => {
+    await mergeCommand({ ours: options.ours, theirs: options.theirs });
+  });
+
+// ss pull
+program
+  .command('pull')
+  .description('将仓库 skill-lock.json 拉取到本地（覆盖前自动备份）')
+  .action(async () => {
+    await pullCommand();
+  });
+
+// ss push
+program
+  .command('push')
+  .description('将本地 skill-lock.json 推送到仓库（覆盖前自动备份），随后自行 git commit/push')
+  .action(async () => {
+    await pushCommand();
+  });
+
+// ss status
+program
+  .command('status')
+  .description('查看本地与仓库 skill-lock.json 同步状态')
+  .action(async () => {
+    await statusCommand();
   });
 
 // ss install
@@ -48,15 +106,6 @@ program
   .description('列出所有手写 skills')
   .action(async () => {
     await listCommand();
-  });
-
-// ss setup
-program
-  .command('setup')
-  .description('一键初始化：定位/创建 skills 仓库（复用当前 git 项目或 clone 指定仓库）+ 同步 + 安装')
-  .option('--git <url>', '指定 skills git 仓库地址（当前目录不在 git 内时自动 clone）')
-  .action(async (options) => {
-    await setupCommand({ git: options.git });
   });
 
 // ── 启动 ──────────────────────────────────────────────

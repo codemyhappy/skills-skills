@@ -22,12 +22,12 @@
       "skipFiles": ["<node_internals>/**"]
     },
     {
-      "name": "Debug ss setup",
+      "name": "Debug ss init",
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["tsx", "${workspaceFolder}/src/cli.ts"],
-      "args": ["setup"],
+      "args": ["init"],
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"]
     },

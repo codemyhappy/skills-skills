@@ -10,11 +10,14 @@ Manage your handwritten skills and `skill-lock.json` in one place, so every devi
 
 ## Core Idea
 
-1. **Your own skills repo** — skills live in the `skills/` directory of a git repo *you* define. `ss setup` detects the current git project, or clones the repo URL you provide; it then creates `skills/` and pre-seeds the default `skills-skills` skill.
-2. **skill-lock.json via symlink** — symlink `~/.agents/.skill-lock.json` to your repo's `skill-lock.json`. The system reads/writes straight into the repo; commit and other devices pull to sync.
+1. **Your own skills repo** — skills live in the `skills/` directory of a git repo *you* define. `ss init` reuses the current git project, or clones the repo URL into the unified directory `~/.config/skills-skills/sync-repo/`.
+2. **skill-lock.json as two real files** — a real file on this device (`~/.agents/.skill-lock.json`) and a version-controlled copy in the repo (`<repo>/skill-lock.json`). `ss` keeps them in sync with git-style `diff` / `merge` / `pull` / `push` three-way merge.
 
 ```
-~/.agents/.skill-lock.json  --(symlink)-->  <repo>/skill-lock.json
+   ss push                     git push
+local ────────►  <repo>/skill-lock.json ────────►  remote
+local ◄────────  <repo>/skill-lock.json ◄────────  remote
+   ss pull                     git pull
 ```
 
 ---
@@ -31,42 +34,48 @@ npm install -g skills-skills   # also provides the `ss` alias
 ## Quick Start
 
 ```bash
-# One-click init: locate/clone your skills repo + symlink + install all handwritten skills
-ss setup
+# Reuse the current git project, or clone the given repo URL into the unified sync-repo dir
+ss init <your-repo-url>
 ```
 
 Daily use:
 
 | Command | Description |
 |---------|-------------|
-| `ss sync` | Symlink `~/.agents/.skill-lock.json` to this repo |
-| `ss sync --restore` | Undo the symlink, restore to a regular file |
-| `ss install` | Install all handwritten skills |
-| `ss install <name>` | Install a specific skill |
-| `ss install --dry-run` | Dry run — list only, do not install |
+| `ss init [url]` | Initialize: reuse current git repo or clone `url` into `~/.config/skills-skills/sync-repo/`, then sync & install |
+| `ss diff [--json]` | Compare local vs repo `skill-lock.json` (per-skill key semantics) |
+| `ss merge [--ours\|--theirs]` | Three-way merge local & repo (base = last sync); conflict aborts unless a side is forced |
+| `ss pull` | Copy repo `skill-lock.json` to local (auto backup before overwrite) |
+| `ss push` | Copy local to repo (auto backup before overwrite), then `git commit` / `git push` manually |
+| `ss sync` | Auto three-way merge (same as `ss merge`) |
+| `ss status` | Show sync state summary |
+| `ss install [<name>]` | Install all (or a specific) handwritten skill |
 | `ss list` | List all handwritten skills |
 | `ss -V` | Print version |
 
 > `ss install` internally runs `npx skills add <absolute-path>`.
+> Time-stamp fields (`installedAt` / `updatedAt`) are ignored in diff/merge to avoid noise from every `install`.
 
 ---
 
-## Add a New Handwritten Skill
+## How three-way merge works
 
-```bash
-# 1. Create a directory under skills/ and write a SKILL.md (with frontmatter)
-mkdir -p skills/my-skill
+The merge base is the last synced snapshot stored in `~/.config/skills-skills/last-sync.json`.
 
-# 2. Install it on the current device
-ss install my-skill
+Per skill key:
 
-# 3. Commit and sync
-git add .
-git commit -m "feat: add my-skill"
-git push
-```
+| base | local | repo | result |
+|---|---|---|---|
+| – | added | – | take local (kept) |
+| – | – | added | take repo (kept) |
+| exists | deleted | exists | delete |
+| exists | exists | deleted | delete |
+| exists | changed | unchanged | take repo |
+| exists | unchanged | changed | take local |
+| exists | changed | changed | **conflict** |
+| – | added | added different | **conflict** |
 
-Run `ss setup` once on each device to restore the full skills environment.
+On conflict `ss merge` writes nothing and lists the keys — resolve with `--ours` / `--theirs` or edit manually.
 
 ---
 
@@ -77,9 +86,15 @@ skills-skills/
 ├── ss / skills-skills     # CLI commands
 ├── skills/                # handwritten skills
 │   └── <name>/SKILL.md
-├── skill-lock.json        # synced lock file (symlink target)
 ├── src/                   # CLI source (TypeScript + tsup)
 └── package.json
+
+~/.config/skills-skills/
+├── config.json            # repoRoot / remoteUrl / repoName
+├── last-sync.json         # three-way merge base
+└── sync-repo/<repoName>/  # unified clone directory for `ss init <url>`
+
+~/.agents/.skill-lock.json # local real lock file handled by this tool
 ```
 
 ---
@@ -90,13 +105,11 @@ skills-skills/
 pnpm dev     # watch build (tsup --watch)
 ```
 
-Press F5 → select "Debug ss (tsx)" in VS Code to debug TypeScript directly; built-in launch configs for sync / setup / install / list.
+Press F5 → select "Debug ss (tsx)" in VS Code to debug TypeScript directly; built-in launch configs for sync / install / list.
 
 ---
 
 ## Notes
 
 - `skill-lock.json` contains local paths — keep this repo **private**.
-- Symlinks work natively on macOS / Linux; Windows needs admin privileges or developer mode.
 - Depends on `npx skills` (from the OpenCLI ecosystem) — make sure it's installed.
-
