@@ -70,7 +70,10 @@ function flattenLegacySymlink(agentPath: string): void {
     unlinkSync(agentPath);
     copyFileSync(real, agentPath);
     log.warn(
-      `检测到旧版软链接，已自动扁平化为真实文件${bak ? `（原内容备份: ${bak}）` : ''}`,
+      {
+        zh: `检测到旧版软链接，已自动扁平化为真实文件${bak ? `（原内容备份: ${bak}）` : ''}`,
+        en: `Detected a legacy symlink; flattened to a real file${bak ? ` (original backed up: ${bak})` : ''}`,
+      },
     );
   } catch {
     /* 路径不存在等，忽略 */
@@ -212,7 +215,7 @@ function mergeThreeWay(base: any, local: any, repo: any): MergeOutcome {
 function resolveRepoRoot(): string {
   const repoRoot = getRepoRoot();
   if (!repoRoot) {
-    log.error('未找到 skills 仓库，请先运行 ss init');
+    log.error({ zh: '未找到 skills 仓库，请先运行 ss init', en: 'No skills repo found. Run ss init first' });
     process.exit(1);
   }
   return repoRoot;
@@ -238,7 +241,10 @@ export async function pullCommand(): Promise<void> {
   const content = readLock(repoPath);
   if (content) writeLastSync(content);
 
-  log.success(`已拉取仓库 skill-lock.json 到本地${bak ? `（原文件备份: ${bak}）` : ''}`);
+  log.success({
+    zh: `已拉取仓库 skill-lock.json 到本地${bak ? `（原文件备份: ${bak}）` : ''}`,
+    en: `Pulled repo skill-lock.json to local${bak ? ` (original backed up: ${bak})` : ''}`,
+  });
 }
 
 /** 推送：本地 → 仓库真实文件（写前备份仓库），随后提示 git 提交 */
@@ -250,7 +256,7 @@ export async function pushCommand(): Promise<void> {
   flattenLegacySymlink(agentPath);
 
   if (!pathExists(agentPath)) {
-    log.error(`本地不存在 skill-lock.json: ${agentPath}`);
+    log.error({ zh: `本地不存在 skill-lock.json: ${agentPath}`, en: `No local skill-lock.json: ${agentPath}` });
     process.exit(1);
   }
 
@@ -261,8 +267,14 @@ export async function pushCommand(): Promise<void> {
   const content = readLock(agentPath);
   if (content) writeLastSync(content);
 
-  log.success(`已推送本地 skill-lock.json 到仓库${bak ? `（原仓库文件备份: ${bak}）` : ''}`);
-  log.info('提示：请执行 git add skill-lock.json && git commit && git push 将变更同步到远端');
+  log.success({
+    zh: `已推送本地 skill-lock.json 到仓库${bak ? `（原仓库文件备份: ${bak}）` : ''}`,
+    en: `Pushed local skill-lock.json to repo${bak ? ` (repo file backed up: ${bak})` : ''}`,
+  });
+  log.info({
+    zh: '提示：请执行 git add skill-lock.json && git commit && git push 将变更同步到远端',
+    en: 'Hint: run git add skill-lock.json && git commit && git push to sync to remote',
+  });
 }
 
 /**
@@ -293,7 +305,7 @@ export async function mergeImpl(
 
   // 无差异（忽略时间戳字段）
   if (computeDiff(local, repo).length === 0) {
-    log.success('本地与仓库已一致，无需合并');
+    log.success({ zh: '本地与仓库已一致，无需合并', en: 'Local and repo are already in sync, nothing to merge' });
     return 'noop';
   }
 
@@ -302,12 +314,15 @@ export async function mergeImpl(
   const result = mergeThreeWay(base, local, repo);
 
   const conflicts = [...result.conflicts];
-  if (result.versionConflict) conflicts.push('(顶层 version 字段不一致)');
+  if (result.versionConflict) conflicts.push('(顶层 version 字段不一致) / (top-level version field mismatch)');
 
   if (conflicts.length > 0 && !force) {
-    log.error('合并存在冲突，未做任何修改：');
+    log.error({ zh: '合并存在冲突，未做任何修改：', en: 'Merge conflicts found, no changes made:' });
     for (const name of conflicts) log.error(`  ✖ ${name}`);
-    log.info('请运行 ss merge --ours / ss merge --theirs 选择一侧，或手动编辑后重试。');
+    log.info({
+      zh: '请运行 ss merge --ours / ss merge --theirs 选择一侧，或手动编辑后重试。',
+      en: 'Run ss merge --ours / ss merge --theirs to pick a side, or edit manually and retry.',
+    });
     return 'conflict';
   }
 
@@ -319,7 +334,7 @@ export async function mergeImpl(
       result.merged.skills[name] =
         force === 'ours' ? local?.skills?.[name] : repo?.skills?.[name];
     }
-    log.warn(`冲突已按 --${force} 解决`);
+    log.warn({ zh: `冲突已按 --${force} 解决`, en: `Conflicts resolved with --${force}` });
   }
 
   // 写回本地与仓库（先各自备份）
@@ -330,15 +345,18 @@ export async function mergeImpl(
   writeFileSync(repoPath, JSON.stringify(result.merged, null, 2) + '\n');
   writeLastSync(result.merged);
 
-  log.success('合并完成，已写回本地与仓库');
-  log.info('提示：若仓库内容有变更，请执行 git add skill-lock.json && git commit && git push');
+  log.success({ zh: '合并完成，已写回本地与仓库', en: 'Merge complete, written to local and repo' });
+  log.info({
+    zh: '提示：若仓库内容有变更，请执行 git add skill-lock.json && git commit && git push',
+    en: 'Hint: if repo content changed, run git add skill-lock.json && git commit && git push',
+  });
   return 'merged';
 }
 
 /** ss merge：三方合并命令 */
 export async function mergeCommand(options: { ours?: boolean; theirs?: boolean }): Promise<void> {
   const repoRoot = resolveRepoRoot();
-  log.title('🔀 skill-lock.json 三方合并');
+  log.title({ zh: '🔀 skill-lock.json 三方合并', en: '🔀 Three-way merge skill-lock.json' });
   const result = await mergeImpl(repoRoot, options);
   if (result === 'conflict') process.exit(1);
 }
@@ -346,7 +364,7 @@ export async function mergeCommand(options: { ours?: boolean; theirs?: boolean }
 /** ss sync：便捷同步，等价 merge */
 export async function syncCommand(): Promise<void> {
   const repoRoot = resolveRepoRoot();
-  log.title('🔄 skill-lock.json 同步');
+  log.title({ zh: '🔄 skill-lock.json 同步', en: '🔄 Sync skill-lock.json' });
   const result = await mergeImpl(repoRoot, {});
   if (result === 'conflict') process.exit(1);
 }
@@ -367,19 +385,19 @@ export async function diffCommand(options: { json?: boolean }): Promise<void> {
     return;
   }
 
-  log.title('skill-lock.json 差异（本地 vs 仓库）');
+  log.title({ zh: 'skill-lock.json 差异（本地 vs 仓库）', en: 'skill-lock.json diff (local vs repo)' });
   const entries = computeDiff(local, repo);
   if (entries.length === 0) {
-    log.success('无差异，本地与仓库一致');
+    log.success({ zh: '无差异，本地与仓库一致', en: 'No differences, local and repo are in sync' });
     return;
   }
   for (const e of entries) {
-    if (e.type === '+') log.info(`  + ${e.name}  （仅本地）`);
-    else if (e.type === '-') log.info(`  - ${e.name}  （仅仓库）`);
-    else log.warn(`  M ${e.name}  （两边存在但内容不同）`);
+    if (e.type === '+') log.info({ zh: `  + ${e.name}  （仅本地）`, en: `  + ${e.name}  (local only)` });
+    else if (e.type === '-') log.info({ zh: `  - ${e.name}  （仅仓库）`, en: `  - ${e.name}  (repo only)` });
+    else log.warn({ zh: `  M ${e.name}  （两边存在但内容不同）`, en: `  M ${e.name}  (different on both sides)` });
   }
   console.log();
-  log.info('运行 ss merge 自动合并，或 ss pull / ss push 强制覆盖。');
+  log.info({ zh: '运行 ss merge 自动合并，或 ss pull / ss push 强制覆盖。', en: 'Run ss merge to auto-merge, or ss pull / ss push to force overwrite.' });
 }
 
 /** ss status：同步状态摘要 */
@@ -394,21 +412,30 @@ export async function statusCommand(): Promise<void> {
   const local = readLock(agentPath);
   const repo = readLock(repoPath);
 
-  log.title('📋 skills 同步状态');
-  log.info(`仓库根目录: ${repoRoot}`);
-  if (cfg.remoteUrl) log.info(`远端地址: ${cfg.remoteUrl}`);
-  log.info(`本地文件: ${pathExists(agentPath) ? agentPath : '（不存在）'}`);
-  log.info(`仓库文件: ${pathExists(repoPath) ? repoPath : '（不存在）'}`);
+  log.title({ zh: '📋 skills 同步状态', en: '📋 skills sync status' });
+  log.info({ zh: `仓库根目录: ${repoRoot}`, en: `Repo root: ${repoRoot}` });
+  if (cfg.remoteUrl) log.info({ zh: `远端地址: ${cfg.remoteUrl}`, en: `Remote URL: ${cfg.remoteUrl}` });
+  log.info({
+    zh: `本地文件: ${pathExists(agentPath) ? agentPath : '（不存在）'}`,
+    en: `Local file: ${pathExists(agentPath) ? agentPath : '(missing)'}`,
+  });
+  log.info({
+    zh: `仓库文件: ${pathExists(repoPath) ? repoPath : '（不存在）'}`,
+    en: `Repo file: ${pathExists(repoPath) ? repoPath : '(missing)'}`,
+  });
 
   const entries = computeDiff(local, repo);
   if (!pathExists(agentPath)) {
-    log.warn('本地尚未有 skill-lock.json，运行 ss pull 拉取');
+    log.warn({ zh: '本地尚未有 skill-lock.json，运行 ss pull 拉取', en: 'No local skill-lock.json yet, run ss pull' });
   } else if (!pathExists(repoPath)) {
-    log.warn('仓库尚未有 skill-lock.json，运行 ss push 推送');
+    log.warn({ zh: '仓库尚未有 skill-lock.json，运行 ss push 推送', en: 'No repo skill-lock.json yet, run ss push' });
   } else if (entries.length === 0) {
-    log.success('状态：已同步，无差异');
+    log.success({ zh: '状态：已同步，无差异', en: 'Status: in sync, no differences' });
   } else {
-    log.warn(`状态：存在 ${entries.length} 处差异（ss diff 查看，ss merge 合并）`);
+    log.warn({
+      zh: `状态：存在 ${entries.length} 处差异（ss diff 查看，ss merge 合并）`,
+      en: `Status: ${entries.length} difference(s) (see ss diff, merge with ss merge)`,
+    });
   }
 }
 
@@ -428,7 +455,7 @@ export async function syncSkillLock(repoRoot: string): Promise<void> {
   if (!hasLocal && !hasRepo) {
     mkdirSync(dirname(agentPath), { recursive: true });
     writeFileSync(agentPath, '{}\n');
-    log.warn('本地与仓库均无 skill-lock.json，已在本地初始化空文件');
+    log.warn({ zh: '本地与仓库均无 skill-lock.json，已在本地初始化空文件', en: 'No skill-lock.json on either side, initialized an empty file locally' });
     return;
   }
   if (!hasLocal) {
@@ -443,7 +470,7 @@ export async function syncSkillLock(repoRoot: string): Promise<void> {
   const local = readLock(agentPath);
   const repo = readLock(repoPath);
   if (computeDiff(local, repo).length === 0) {
-    log.success('skill-lock.json 本地与仓库已一致');
+    log.success({ zh: 'skill-lock.json 本地与仓库已一致', en: 'skill-lock.json is in sync between local and repo' });
     return;
   }
   await mergeImpl(repoRoot, {});

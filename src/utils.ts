@@ -20,6 +20,21 @@ const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 export interface Config {
   /** 远端仓库地址（init 时记录，仅用于展示/提示，无需用户手动维护） */
   remoteUrl?: string;
+  /** 输出语言：zh 中文 / en English（默认 zh） */
+  lang?: 'zh' | 'en';
+}
+
+/** 语言类型 */
+export type Lang = 'zh' | 'en';
+
+/** 双语消息：可传字符串（不分语言）或 { zh, en } 对象 */
+export type Msg = string | { zh: string; en: string };
+
+const DEFAULT_LANG: Lang = 'zh';
+
+/** 读取当前输出语言（未配置默认中文） */
+export function getLang(): Lang {
+  return readConfig().lang === 'en' ? 'en' : 'zh';
 }
 
 /** 读取本地配置 */
@@ -106,15 +121,19 @@ export function writeLastSync(lock: any): void {
   writeFileSync(getLastSyncPath(), JSON.stringify(lock, null, 2) + '\n');
 }
 
-// ── 日志工具 ──────────────────────────────────────────
+// ── 日志工具（支持中英双语，按 config.lang 自动选择）────
+function pick(msg: Msg): string {
+  if (typeof msg === 'string') return msg;
+  return getLang() === 'en' ? msg.en : msg.zh;
+}
 
 export const log = {
-  info: (msg: string) => console.log(chalk.blue('ℹ'), msg),
-  success: (msg: string) => console.log(chalk.green('✔'), msg),
-  warn: (msg: string) => console.log(chalk.yellow('⚠'), msg),
-  error: (msg: string) => console.log(chalk.red('✖'), msg),
-  title: (msg: string) => console.log(chalk.bold.cyan('\n' + msg)),
-  dim: (msg: string) => console.log(chalk.dim('  ' + msg)),
+  info: (msg: Msg) => console.log(chalk.blue('ℹ'), pick(msg)),
+  success: (msg: Msg) => console.log(chalk.green('✔'), pick(msg)),
+  warn: (msg: Msg) => console.log(chalk.yellow('⚠'), pick(msg)),
+  error: (msg: Msg) => console.log(chalk.red('✖'), pick(msg)),
+  title: (msg: Msg) => console.log(chalk.bold.cyan('\n' + pick(msg))),
+  dim: (msg: Msg) => console.log(chalk.dim('  ' + pick(msg))),
 };
 
 // ── 文件系统工具 ──────────────────────────────────────

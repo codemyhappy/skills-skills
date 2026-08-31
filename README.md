@@ -38,6 +38,8 @@ npm install -g skills-skills   # also provides the `ss` alias
 ss init <your-repo-url>
 ```
 
+> `ss init` asks you to pick an output language (Chinese / English) and saves it to `~/.config/skills-skills/config.json` (`lang`). Pass `--lang zh` or `--lang en` to skip the prompt. All commands respect this language.
+
 Daily use:
 
 | Command | Description |

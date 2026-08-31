@@ -1,5 +1,7 @@
 # skills-skills 使用指南
 
+> **English**: [SKILLS-GUIDE.en.md](SKILLS-GUIDE.en.md)
+
 skills-skills（`ss`）是一个「手写 skills 同步与管理」工具：把你的手写 skills 和 `skill-lock.json`
 统一放在一个 git 仓库里，从而在**每台设备上都保持完全一致的 skills 环境**。
 

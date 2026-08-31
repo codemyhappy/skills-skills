@@ -34,6 +34,7 @@
 - 覆盖写入前先备份，按时间命名：`skill-lock-YYYY-MM-DD-HHmmss.json.ss.bak`（放 `~/.agents/`）。
 - 遇到旧版遗留软链接：自动扁平化为真实文件（带备份），不报错中断。
 - 报错信息要给出**可操作的下一步**（如安装命令、`ss merge --ours` 等），不抛裸异常。
+- **双语输出**：所有命令提示支持中/英，按 `config.json` 的 `lang`（`zh`/`en`，默认 `zh`）自动选择。log 消息用 `{ zh, en }` 对象；`ss init` 提供 `--lang <zh|en>`。文档（README / SKILLS-GUIDE）需中英两份。
 - CWD 中执行 `ss`（裸命令）输出帮助 + 精简使用指南。
 - 注释用中文；逻辑改动请同步更新 README 双语 + SKILLS-GUIDE 相关描述。
 

@@ -38,6 +38,8 @@ npm install -g skills-skills   # 同时提供 ss / skills-skills 两个命令
 ss init <你的仓库地址>
 ```
 
+> `ss init` 会询问选择输出语言（中文 / English），并保存到 `~/.config/skills-skills/config.json`（`lang` 字段）。可用 `--lang zh` 或 `--lang en` 跳过询问；所有命令都会按该语言输出。
+
 日常使用：
 
 | 命令 | 说明 |

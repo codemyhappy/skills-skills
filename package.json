@@ -12,6 +12,7 @@
     "bin/",
     "skills/",
     "SKILLS-GUIDE.md",
+    "SKILLS-GUIDE.en.md",
     "README.zh-CN.md"
   ],
   "scripts": {
