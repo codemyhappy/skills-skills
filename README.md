@@ -42,7 +42,7 @@ Daily use:
 
 | Command | Description |
 |---------|-------------|
-| `ss init [url]` | Initialize: clone `url` into the unified `~/.config/skills-skills/sync-repo/` dir (idempotent), then sync & install |
+| `ss init [url]` | Initialize: clone `url` into the unified `~/.config/skills-skills/sync-repo/` dir (idempotent), then sync & install. Alias: `ss setup` (legacy compat) |
 | `ss diff [--json]` | Compare local vs repo `skill-lock.json` (per-skill key semantics) |
 | `ss merge [--ours\|--theirs]` | Three-way merge local & repo (base = last sync); conflict aborts unless a side is forced |
 | `ss pull` | Copy repo `skill-lock.json` to local (auto backup before overwrite) |

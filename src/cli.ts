@@ -20,6 +20,26 @@ const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '..', 'package.json'), 'utf-8'),
 );
 
+// ── 项目使用指南（随帮助一起输出）──────────────────────
+const USAGE_GUIDE = `
+📖 使用指南
+
+1. 初始化（每台设备执行一次）
+   ss init <你的仓库地址>
+
+2. 同步 skill-lock.json
+   ss push        # 改动本机环境后执行：本地写入仓库（随后 git commit/push）
+   ss pull        # 其他设备有更新后执行：仓库写回本地
+
+3. 差异与合并
+   ss diff        # 查看本地与仓库的差异
+   ss merge       # 自动合并；冲突时按提示加 --ours 或 --theirs
+
+4. 管理技能
+   ss install [名称]   # 安装技能到本机
+   ss list             # 列出所有手写技能
+`;
+
 // ── CLI 定义 ──────────────────────────────────────────
 const program = new Command();
 
@@ -27,12 +47,14 @@ program
   .name('ss')
   .description('个人手写 skills 管理工具 — 跨设备统一管理你的 skills')
   .version(pkg.version, '-V, --version', '输出版本号')
-  .addHelpCommand('help [command]', '显示帮助信息');
+  .addHelpCommand('help [command]', '显示帮助信息')
+  .addHelpText('after', USAGE_GUIDE);
 
-// ss init
+// ss init（别名 setup：兼容老版本）
 program
   .command('init')
-  .description('初始化 skills 仓库：clone 指定仓库到统一目录 ~/.config/skills-skills/sync-repo 并同步 skill-lock.json')
+  .alias('setup')
+  .description('初始化 skills 仓库：clone 指定仓库到统一目录 ~/.config/skills-skills/sync-repo 并同步 skill-lock.json（别名 setup，兼容老版本）')
   .argument('[url]', 'skills git 仓库地址')
   .action(async (url) => {
     await initCommand({ url });
@@ -109,4 +131,11 @@ program
   });
 
 // ── 启动 ──────────────────────────────────────────────
+// 裸执行 `ss`（无任何参数）：输出帮助 + 使用指南，
+// 并以退出码 0 正常结束（commander 默认会打到 stderr 并以 1 退出）
+if (process.argv.slice(2).length === 0) {
+  program.outputHelp();
+  process.exit(0);
+}
+
 program.parse();

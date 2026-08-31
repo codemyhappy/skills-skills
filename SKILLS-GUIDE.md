@@ -9,29 +9,37 @@ skills-skills（`ss`）是一个「手写 skills 同步与管理」工具：把�
 <你的 skills 仓库>/
 ├── skills/                 # 你手写的 skills
 │   └── <skill-name>/SKILL.md
-├── skill-lock.json         # 系统技能锁文件（通过软链接同步）
+├── skill-lock.json         # 系统技能锁文件（仓库内真实文件，受版本控制）
 └── SKILLS-GUIDE.md         # 本使用指南
+```
+
+本机相关目录：
+
+```
+~/.agents/.skill-lock.json              本机生效的锁文件（真实文件）
+~/.config/skills-skills/sync-repo/<仓库名>/  仓库的唯一 clone 目录
 ```
 
 ## 快速开始
 
-### 1. 初始化（首次 / 新设备）
+### 1. 初始化（每台设备执行一次）
 
 ```bash
-cd <你的 skills 仓库>
-ss setup
+ss init <你的仓库地址>
+# 兼容旧版：ss setup 等价于 ss init
 ```
 
-- 若当前目录已在 git 项目内，直接复用该仓库；
-- 否则可执行 `ss setup --git <仓库地址>` 自动克隆一个仓库；
+- 仓库会 clone 到统一目录 `~/.config/skills-skills/sync-repo/<仓库名>`（重复执行幂等）；
 - 自动创建 `skills/` 目录、生成本指南、预置内置技能，
-  并把本地的 `~/.agents/.skill-lock.json` 拷贝进仓库建立软链接，全程无需手动操作。
+  并同步 `skill-lock.json` 到本机，全程无需手动操作。
 
 ### 2. 日常同步
 
 ```bash
-ss sync            # 让 ~/.agents/.skill-lock.json 软链接到本仓库
-ss sync --restore  # 取消软链接，恢复为普通文件
+ss push     # 本机环境有改动时：本地 lock 写入仓库（随后 git commit / push）
+ss pull     # 其他设备有更新时：仓库 lock 写回本地
+ss diff     # 查看本地与仓库的差异
+ss merge    # 自动三方合并（冲突时加 --ours 或 --theirs 强制取一侧）
 ```
 
 ### 3. 安装 / 列出 skills
@@ -57,15 +65,14 @@ git push                   # 推送到远端，其他设备 pull 即可同步
 ## 其他设备 / 新机器恢复
 
 ```bash
-git clone <你的 skills 仓库地址>
-cd <你的 skills 仓库>
-ss setup
+ss init <你的仓库地址>
+ss pull
+ss install
 ```
 
-一条命令即可自动恢复 `skills/`、`skill-lock.json` 软链接，并安装所有手写 skill。
+一条命令即可自动恢复 `skills/`、`skill-lock.json`，并安装所有手写 skill。
 
 ## 备注
 
 - `skill-lock.json` 可能包含本地路径等敏感信息，请保持仓库**私有**。
-- 软链接在 macOS / Linux 原生可用；Windows 需要管理员权限或开发者模式。
 - `ss install` 内部调用 `npx skills add <绝对路径>`。

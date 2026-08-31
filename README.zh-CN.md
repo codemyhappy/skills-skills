@@ -42,7 +42,7 @@ ss init <你的仓库地址>
 
 | 命令 | 说明 |
 |------|------|
-| `ss init [url]` | 初始化：把 `url` clone 到统一目录 `~/.config/skills-skills/sync-repo/`（幂等），随后同步并安装 |
+| `ss init [url]` | 初始化：把 `url` clone 到统一目录 `~/.config/skills-skills/sync-repo/`（幂等），随后同步并安装。别名为 `ss setup`（兼容老版本） |
 | `ss diff [--json]` | 比较本地与仓库的 `skill-lock.json`（按 skill key 语义对比） |
 | `ss merge [--ours\|--theirs]` | 三方合并本地与仓库（base = 上次同步基线）；有冲突默认中止，可用一侧强制解决 |
 | `ss pull` | 仓库 → 本地（覆盖前自动备份） |
