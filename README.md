@@ -39,6 +39,8 @@ ss init <your-repo-url>
 ```
 
 > All `ss` commands respect the output language saved in `~/.config/skills-skills/config.json` (`lang`, defaults to `zh`). Switch any time with `ss config --lang en` (or `zh`). No interactive prompt in `ss init`.
+>
+> Before cloning or overwriting anything, `ss init` runs read-only pre-checks: system dependencies (`git` / `npx`), whether the target dir already exists & is a git repo, whether a previous init is recorded, and whether the requested URL **matches** the existing repo's `origin` (URL normalization ignores `.git` suffix, trailing slash, `.git`-less, SSH vs HTTPS `host/path` forms and `file://` — but NOT host). Mismatches are refused with an actionable hint.
 
 Daily use:
 

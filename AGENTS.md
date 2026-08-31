@@ -29,7 +29,7 @@
 
 ## 关键行为约定
 
-- **两段式执行**：校验段（只读、零副作用：`git`/`npx` 依赖、目标目录占用、远端 `ls-remote`）全部通过，才进入执行段（clone / 建目录 / 写文件）。
+- **两段式执行**：校验段（只读、零副作用：`git`/`npx` 依赖、目标目录占用、远端 `ls-remote`、**是否已初始化 + 远端地址一致性**）全部通过，才进入执行段（clone / 建目录 / 设置 origin / 写文件）。
 - 执行段失败必须清理刚 clone 的目录，**不留残留**。
 - diff/merge 忽略 `installedAt` / `updatedAt` 时间戳字段（避免每次 install 都产生噪音）。
 - 覆盖写入前先备份，按时间命名：`skill-lock-YYYY-MM-DD-HHmmss.json.ss.bak`（放 `~/.agents/`）。

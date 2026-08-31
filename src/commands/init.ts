@@ -98,6 +98,41 @@ function getRemoteUrl(repoRoot: string): string | undefined {
   }
 }
 
+/**
+ * 归一化 git URL，用于跨写法比较：
+ *   https://github.com/foo/bar.git
+ *   https://github.com/foo/bar/
+ *   git@github.com:foo/bar.git
+ *   ssh://git@github.com/foo/bar
+ * 统一变为：github.com/foo/bar（小写）
+ * 注意：协议不同（http vs ssh）只影响写法，不影响「同一个仓库」的判定，所以一并归一。
+ */
+function normalizeUrl(u: string | undefined | null): string {
+  if (!u) return '';
+  let s = u.trim();
+  // file://localhost/...  →  ...  (strip scheme+host)
+  s = s.replace(/^file:\/\/localhost\//i, '');
+  // file:///abs/path  →  /abs/path  (strip scheme; leading slash preserved)
+  s = s.replace(/^file:\/\//i, '');
+  // git@host:relative/path  →  host/relative/path  (scp 语法；仅相对路径适用 —
+  // 若路径为绝对（git@host:/abs/...），它表示 SSH 到 host 上的绝对路径，与本机路径不等，故当作不同远端处理)
+  s = s.replace(/^git@([^:]+):/i, '$1/');
+  // ssh://user@host/path  →  host/path
+  s = s.replace(/^[a-z]+:\/\/[^/@]+@([^/]+)\//i, '$1/');
+  // 通用 https://host/  →  host/
+  s = s.replace(/^[a-z]+:\/\/([^/]+)\//i, '$1/');
+  // 去掉结尾的 .git 与 /
+  s = s.replace(/\.git$/i, '').replace(/\/+$/, '');
+  return s.toLowerCase();
+}
+
+/** 两个 URL 是否指向同一仓库（归一化后比较） */
+function sameRepo(a: string | undefined | null, b: string | undefined | null): boolean {
+  const na = normalizeUrl(a);
+  const nb = normalizeUrl(b);
+  return na !== '' && na === nb;
+}
+
 /** 确保仓库 skills/ 目录下预置默认的 skills-skills 技能 */
 function ensureDefaultSkill(skillsDir: string): void {
   const src = resolve(getPackageRoot(), 'skills', 'skills-skills');
@@ -161,32 +196,90 @@ export async function initCommand(options: { url?: string }) {
     en: `Output language: ${getLang() === 'en' ? 'English' : 'Chinese'} (change with ss config --lang <zh|en>)`,
   });
 
-  // 1) 系统依赖（git / npx）检测
+    // 1) 系统依赖（git / npx）检测
   precheckDependencies();
 
-  let cloneUrl: string | null = null;
-
-  cloneUrl = (options.url?.trim() || (await promptGitUrl()).trim()) || null;
-  if (!cloneUrl) {
-    log.error({ zh: '未提供 git 仓库地址，取消初始化', en: 'No git repo URL provided, init cancelled' });
-    process.exit(1);
-  }
+  /** 用户本次传入的远端地址（位置参数），可能为空 */
+  const inputUrl = options.url?.trim() || null;
+  /** 上次 init 记录在 config 中的远端地址（可能无） */
+  const cfg = readConfig();
+  /** 是否已「初始化过」：config 中记录了 remoteUrl */
+  const wasInitialized = Boolean(cfg.remoteUrl);
 
   // 统一 clone 到的仓库根（也是整个目录本身）
   let repoRoot = getSkillSyncRepoDir();
 
-  if (pathExists(repoRoot)) {
-    // 目标已存在：仅当它是 git 仓库才允许幂等复用
+  let cloneUrl: string | null = null;        // 若需新建，则 clone 到此地址
+  let originNeedsSet: string | null = null;   // 执行段中，为 origin 设置/更新的地址（只读校验段不执行）
+  const dirExists = pathExists(repoRoot);
+
+  // ── 层次 1/2/3：目录存在性 & 是否 git 仓库 ──────────────
+  if (dirExists) {
     if (!isInsideGitRepo(repoRoot)) {
       log.error({ zh: `目标目录已存在但不是 git 仓库: ${repoRoot}`, en: `Target dir exists but is not a git repo: ${repoRoot}` });
-      log.error({ zh: '请先移除或改名该目录后重试。', en: 'Remove or rename that directory, then retry.' });
+      log.error({
+        zh: '你可以清空该目录 `rm -rf ~/.config/skills-skills/skill-sync-repo` 后重试，或直接 `cd` 进该目录当作普通 git 仓库使用。',
+        en: 'Empty the dir `rm -rf ~/.config/skills-skills/skill-sync-repo` and retry, or treat that dir as an ordinary git repo.',
+      });
       process.exit(1);
     }
+
+    // 目录已存在且为 git 仓库 → 读取 origin，进入「是否已初始化 + 地址是否匹配」校验
+    const origin = getRemoteUrl(repoRoot);
+
+    // 期望远端地址的优先级：用户本次输入 > config 历史记录
+    const expectedUrl = inputUrl ?? cfg.remoteUrl ?? null;
+
+    if (wasInitialized) {
+      log.info({
+        zh: `检测到已初始化过 (config.remoteUrl = ${cfg.remoteUrl})`,
+        en: `Already initialized before (config.remoteUrl = ${cfg.remoteUrl})`,
+      });
+    }
+
+    // ── 层次 4：地址一致性校验 ───────────────────────────
+    if (expectedUrl) {
+      if (origin && !sameRepo(origin, expectedUrl)) {
+        // origin 与期望不匹配 → 阻止
+        log.error({
+          zh: `仓库远端地址不匹配，拒绝覆盖已存在的目录:\n  现有 origin: ${origin}\n  期望地址:   ${expectedUrl}`,
+          en: `Remote URL mismatch, refusing to overwrite existing dir:\n  existing origin: ${origin}\n  expected URL:    ${expectedUrl}`,
+        });
+        log.info({
+          zh: '解决办法：\n  1) `git remote set-url origin <正确地址>` 修正远端后重试；\n  2) 或 `rm -rf ~/.config/skills-skills/{skill-sync-repo,config.json}` 后重新 init。',
+          en: 'Fix it:\n  1) `git remote set-url origin <correct-url>` and retry;\n  2) or `rm -rf ~/.config/skills-skills/{skill-sync-repo,config.json}` and re-init.',
+        });
+        process.exit(1);
+      }
+      // origin 为空（没配 remote）却有期望地址 → 执行段设置 origin
+      if (!origin) {
+        originNeedsSet = expectedUrl;
+        log.warn({ zh: `目标仓库 origin 为空，将设置为: ${expectedUrl}`, en: `Repo has no origin; will set to: ${expectedUrl}` });
+      }
+    }
+
+    // 地址一致（或都为空）→ 幂等复用，无需重新 clone
     log.warn({ zh: `目标目录已存在且为 git 仓库，直接复用: ${repoRoot}`, en: `Target dir already exists as a git repo, reusing: ${repoRoot}` });
     cloneUrl = null;
   } else {
+    // ── 目录不存在：决定要 clone 的地址 ────────────────
+    cloneUrl = inputUrl ?? cfg.remoteUrl ?? null;
+    if (!cloneUrl) {
+      cloneUrl = (await promptGitUrl()).trim() || null;
+    }
+    if (!cloneUrl) {
+      log.error({ zh: '未提供 git 仓库地址，取消初始化', en: 'No git repo URL provided, init cancelled' });
+      process.exit(1);
+    }
     // 校验远程仓库可访问（只读网络检查）
     precheckRemote(cloneUrl);
+    if (wasInitialized) {
+      // config 里有地址但目录不见 → 警告，说明可能是上次 clone 失败
+      log.warn({
+        zh: `检测到 config.json 里记录的远端 (${cfg.remoteUrl}) 但目录不存在，重新克隆`,
+        en: `config.json has remote (${cfg.remoteUrl}) but the repo dir is missing; re-cloning`,
+      });
+    }
   }
 
   log.success({ zh: `前置校验通过，目标仓库: ${repoRoot}`, en: `Pre-checks passed, target repo: ${repoRoot}` });
@@ -198,6 +291,13 @@ export async function initCommand(options: { url?: string }) {
     if (cloneUrl) {
       repoRoot = cloneRepo(cloneUrl, repoRoot);
       clonedRoot = repoRoot;
+    }
+
+    // 2. 设置 origin（复用已有目录但 origin 为空的情况）
+    if (originNeedsSet) {
+      log.info({ zh: '设置仓库 origin...', en: 'Setting repo origin...' });
+      execSync(`git remote add origin ${originNeedsSet}`, { cwd: repoRoot, stdio: 'inherit' });
+      log.success({ zh: `origin 已设置为: ${originNeedsSet}`, en: `Origin set to: ${originNeedsSet}` });
     }
 
     // 2. 确保 skills/ 目录存在

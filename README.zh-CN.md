@@ -39,6 +39,8 @@ ss init <你的仓库地址>
 ```
 
 > 所有 `ss` 命令按 `~/.config/skills-skills/config.json` 中 `lang` 字段（默认 `zh`）输出。随时可用 `ss config --lang en`（或 `zh`）切换；`ss init` 不再交互询问。
+>
+> `ss init` 在克隆或覆盖任何内容前执行只读预校验：系统依赖 (`git` / `npx`)，目标目录是否已存在且为 git 仓库，是否曾初始化过，以及输入的仓库地址是否与已有目录的 `origin` **匹配**（URL 归一化时忽略 `.git` 后缀、末尾斜杠、`.git`-less、以及 SSH 与 HTTPS 的 `host/path` 形式与 `file://`，但**不**跨主机）。不匹配时会拒绝并给出可操作的解决办法。
 
 日常使用：
 
