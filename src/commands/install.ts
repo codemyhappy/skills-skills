@@ -1,12 +1,22 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { execSync } from 'node:child_process';
-import { getRepoRoot, getSkillsDir, getLang, log, pathExists } from '../utils.js';
+import chalk from 'chalk';
+import { getRepoRoot, getSkillsDir, getLang, log, pathExists, getAgentSkillLockPath, getRepoSKillLockPath } from '../utils.js';
 
 interface SkillInfo {
   name: string;
   description: string;
   path: string;
+}
+
+/** 读取 lock JSON（解析失败返回 null） */
+function readLock(p: string): any | null {
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8'));
+  } catch {
+    return null;
+  }
 }
 
 /** 解析当前 skills 仓库根，找不到则报错退出 */
@@ -87,23 +97,55 @@ function parseSkillMd(filePath: string, lang: 'zh' | 'en' = 'zh'): { name?: stri
 
 export async function listCommand() {
   const repoRoot = resolveRepoRoot();
+  const lang = getLang();
   const skills = scanSkills(repoRoot);
 
+  // ── 1. 手写 skills（skills/ 目录下）─────────────────────
   if (skills.length === 0) {
     log.warn({ zh: 'skills/ 目录下未找到任何手写 skill', en: 'No handwritten skills found in skills/' });
-    return;
+  } else {
+    log.title({
+      zh: `📦 手写 Skills（共 ${skills.length} 个）`,
+      en: `📦 Handwritten Skills (${skills.length} total)`,
+    });
+    console.log();
+
+    for (const skill of skills) {
+      console.log(`  ${skill.name}`);
+      log.dim({ zh: `    描述: ${skill.description}`, en: `    description: ${skill.description}` });
+      log.dim({ zh: `    路径: ${skill.path}`, en: `    path: ${skill.path}` });
+      console.log();
+    }
   }
 
-  log.title({
-    zh: `📦 手写 Skills（共 ${skills.length} 个）`,
-    en: `📦 Handwritten Skills (${skills.length} total)`,
-  });
-  console.log();
+  // ── 2. skill-lock.json 中的技能 ────────────────────────
+  const agentLockPath = getAgentSkillLockPath();
+  const repoLockPath = getRepoSKillLockPath(repoRoot);
+  const agentLock = readLock(agentLockPath);
+  const repoLock = readLock(repoLockPath);
 
-  for (const skill of skills) {
-    console.log(`  ${skill.name}`);
-    log.dim({ zh: `    描述: ${skill.description}`, en: `    description: ${skill.description}` });
-    log.dim({ zh: `    路径: ${skill.path}`, en: `    path: ${skill.path}` });
+  const agentSkills = agentLock?.skills ? Object.keys(agentLock.skills) : [];
+  const repoSkills = repoLock?.skills ? Object.keys(repoLock.skills) : [];
+
+  // 合并去重
+  const allLockSkills = [...new Set([...agentSkills, ...repoSkills])].sort();
+
+  if (allLockSkills.length > 0) {
+    log.title({
+      zh: `🔒 skill-lock.json 中的技能（共 ${allLockSkills.length} 个）`,
+      en: `🔒 Skills in skill-lock.json (${allLockSkills.length} total)`,
+    });
+    console.log();
+
+    for (const name of allLockSkills) {
+      const inAgent = agentSkills.includes(name);
+      const inRepo = repoSkills.includes(name);
+      let tag = '';
+      if (inAgent && inRepo) tag = lang === 'en' ? '  (local + repo)' : '  （本地 + 仓库）';
+      else if (inAgent) tag = lang === 'en' ? '  (local only)' : '  （仅本地）';
+      else tag = lang === 'en' ? '  (repo only)' : '  （仅仓库）';
+      log.info(`  ${name}${chalk.dim(tag)}`);
+    }
     console.log();
   }
 }
