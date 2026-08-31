@@ -17,7 +17,7 @@ skills-skills（`ss`）是一个「手写 skills 同步与管理」工具：把�
 
 ```
 ~/.agents/.skill-lock.json              本机生效的锁文件（真实文件）
-~/.config/skills-skills/sync-repo/<仓库名>/  仓库的唯一 clone 目录
+~/.config/skills-skills/skill-sync-repo/  仓库的统一 clone 目录（也是仓库根）
 ```
 
 ## 快速开始
@@ -29,7 +29,7 @@ ss init <你的仓库地址>
 # 兼容旧版：ss setup 等价于 ss init
 ```
 
-- 仓库会 clone 到统一目录 `~/.config/skills-skills/sync-repo/<仓库名>`（重复执行幂等）；
+- 仓库会 clone 到统一目录 `~/.config/skills-skills/skill-sync-repo`（重复执行幂等）；
 - 自动创建 `skills/` 目录、生成本指南、预置内置技能，
   并同步 `skill-lock.json` 到本机，全程无需手动操作。
 
@@ -75,4 +75,5 @@ ss install
 ## 备注
 
 - `skill-lock.json` 可能包含本地路径等敏感信息，请保持仓库**私有**。
+- `ss init` 会先检查系统依赖：自动检测 `git` 与 `npx skills` 是否可用，缺失时给出安装指引。
 - `ss install` 内部调用 `npx skills add <绝对路径>`。

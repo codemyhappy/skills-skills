@@ -54,7 +54,7 @@ program
 program
   .command('init')
   .alias('setup')
-  .description('初始化 skills 仓库：clone 指定仓库到统一目录 ~/.config/skills-skills/sync-repo 并同步 skill-lock.json（别名 setup，兼容老版本）')
+  .description('初始化 skills 仓库：clone 指定仓库到统一目录 ~/.config/skills-skills/skill-sync-repo 并同步 skill-lock.json（别名 setup，兼容老版本）')
   .argument('[url]', 'skills git 仓库地址')
   .action(async (url) => {
     await initCommand({ url });

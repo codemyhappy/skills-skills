@@ -8,25 +8,22 @@ import { installCommand, scanSkills } from './install.js';
 import {
   getPackageRoot,
   getSkillsDir,
-  getGitRoot,
-  getRepoClonePath,
+  getSkillSyncRepoDir,
   isInsideGitRepo,
-  repoNameFromUrl,
   writeConfig,
   log,
   pathExists,
 } from '../utils.js';
 
-/** git clone 到 parentDir 下，返回克隆出的 git 仓库根路径（失败时抛错，交由调用方清理） */
-function cloneRepo(url: string, parentDir: string): string {
+/** git clone 到 skillDir 目录本身（该目录即仓库根），失败时抛错，交由调用方清理 */
+function cloneRepo(url: string, dest: string): string {
   log.info(`clone 仓库: ${url}`);
-  execSync(`git clone ${url}`, { cwd: parentDir, stdio: 'inherit' });
-  const dest = resolve(parentDir, repoNameFromUrl(url));
+  execSync(`git clone ${url} ${dest}`, { stdio: 'inherit' });
   if (!pathExists(dest)) {
     throw new Error(`clone 失败或目录不存在: ${dest}`);
   }
   log.success(`已 clone 到: ${dest}`);
-  return getGitRoot(dest);
+  return dest;
 }
 
 /** 非交互环境下用 readline 询问 git 仓库地址 */
@@ -35,6 +32,33 @@ async function promptGitUrl(): Promise<string> {
   const url = await rl.question('请输入你的 skills git 仓库地址: ');
   rl.close();
   return url.trim();
+}
+
+/** 检测系统依赖（git / npx）是否可用，缺失时给出安装指引并退出 */
+function precheckDependencies(): void {
+  // git
+  try {
+    execSync('git --version', { stdio: 'pipe' });
+  } catch {
+    log.error('未检测到 git，请先安装：');
+    log.error('  macOS:   brew install git 或执行 xcode-select --install');
+    log.error('  Windows: 到 https://git-scm.com/download/win 下载安装');
+    log.error('  Linux:   sudo apt-get install -y git  （或 yum/dnf 等价命令）');
+    log.error('安装完成后请重新运行 ss init。');
+    process.exit(1);
+  }
+
+  // npx（ss install 通过 npx skills 临时调用，无需预装 skills 包）
+  try {
+    execSync('npx --version', { stdio: 'pipe' });
+  } catch {
+    log.error('未检测到 npx，请先安装 Node.js >= 18：');
+    log.error('  到 https://nodejs.org/ 下载安装，或通过 nvm / fnm 等版本管理器安装。');
+    log.error('安装完成后请重新运行 ss init。');
+    process.exit(1);
+  }
+
+  log.success('系统依赖检查通过（git / npx 均可用）');
 }
 
 /** 校验远程仓库确实可访问（只读网络检查，无本地改动） */
@@ -103,17 +127,18 @@ function ensureGuide(repoRoot: string): void {
 
 /**
  * ss init：初始化 skills 仓库（git 风格）。
- * 仓库统一存放在 ~/.config/skills-skills/sync-repo/<repoName>，与执行目录无关：
- * 提供 url（位置参数或交互询问）→ clone 到统一目录；目标已存在且为 git 仓库则幂等复用。
+ * 仓库统一存放在 ~/.config/skills-skills/skill-sync-repo，与执行目录无关：
+ * 提供 url（位置参数或交互询问）→ clone 到该统一目录；目录已存在且为 git 仓库则幂等复用。
  * 校验（只读）全部通过后才执行写入。
  */
 export async function initCommand(options: { url?: string }) {
   log.title('🚀 初始化 skills 仓库');
 
   // ═══ 校验段：只读、零副作用 ═══
-  let repoRoot: string | null = null;
+  // 1) 系统依赖（git / npx）检测
+  precheckDependencies();
+
   let cloneUrl: string | null = null;
-  let pendingRoot: string | null = null;
 
   cloneUrl = (options.url?.trim() || (await promptGitUrl()).trim()) || null;
   if (!cloneUrl) {
@@ -121,42 +146,37 @@ export async function initCommand(options: { url?: string }) {
     process.exit(1);
   }
 
-  // 统一 clone 到 sync-repo/<repoName>（与执行目录无关）
-  const repoName = repoNameFromUrl(cloneUrl);
-  pendingRoot = getRepoClonePath(repoName);
+  // 统一 clone 到的仓库根（也是整个目录本身）
+  let repoRoot = getSkillSyncRepoDir();
 
-  if (pathExists(pendingRoot)) {
-    if (isInsideGitRepo(pendingRoot)) {
-      // 已存在且是 git 仓库 → 幂等复用，不再 clone
-      log.warn(`目标目录已存在且为 git 仓库，直接复用: ${pendingRoot}`);
-      repoRoot = pendingRoot;
-      cloneUrl = null;
-    } else {
-      log.error(`目标目录已存在但不是 git 仓库: ${pendingRoot}`);
-      log.error('请先移除该目录后重试。');
+  if (pathExists(repoRoot)) {
+    // 目标已存在：仅当它是 git 仓库才允许幂等复用
+    if (!isInsideGitRepo(repoRoot)) {
+      log.error(`目标目录已存在但不是 git 仓库: ${repoRoot}`);
+      log.error('请先移除或改名该目录后重试。');
       process.exit(1);
     }
+    log.warn(`目标目录已存在且为 git 仓库，直接复用: ${repoRoot}`);
+    cloneUrl = null;
   } else {
     // 校验远程仓库可访问（只读网络检查）
     precheckRemote(cloneUrl);
   }
 
-  log.success(`前置校验通过，目标仓库: ${repoRoot ?? pendingRoot}`);
+  log.success(`前置校验通过，目标仓库: ${repoRoot}`);
 
   // ═══ 执行段：此时才开始任何副作用 ═══
   let clonedRoot: string | null = null;
   try {
-    // 1. clone（若需新建仓库，clone 到统一 sync-repo 目录）
+    // 1. clone（若需新建仓库，直接 clone 到统一目录即仓库根）
     if (cloneUrl) {
-      const parentDir = resolve(getRepoClonePath(repoNameFromUrl(cloneUrl)), '..');
-      mkdirSync(parentDir, { recursive: true });
-      repoRoot = cloneRepo(cloneUrl, parentDir);
+      repoRoot = cloneRepo(cloneUrl, repoRoot);
       clonedRoot = repoRoot;
     }
 
     // 2. 确保 skills/ 目录存在
     log.info('检查 skills 目录...');
-    const skillsDir = getSkillsDir(repoRoot!);
+    const skillsDir = getSkillsDir(repoRoot);
     if (!pathExists(skillsDir)) {
       mkdirSync(skillsDir, { recursive: true });
       log.success(`已创建 skills/ 目录: ${skillsDir}`);
@@ -170,27 +190,25 @@ export async function initCommand(options: { url?: string }) {
 
     // 4. 生成使用指南
     log.info('生成使用指南...');
-    ensureGuide(repoRoot!);
+    ensureGuide(repoRoot);
 
-    // 5. 记录仓库配置
+    // 5. 记录仓库配置（config 只存 remoteUrl，仓库根为固定统一目录，无需记录）
     log.info('记录仓库配置...');
-    const remoteUrl = cloneUrl ?? getRemoteUrl(repoRoot!);
+    const remoteUrl = cloneUrl ?? getRemoteUrl(repoRoot);
     writeConfig({
-      repoRoot: repoRoot!,
       remoteUrl,
-      repoName: remoteUrl ? repoNameFromUrl(remoteUrl) : undefined,
     });
-    log.success(`已记录 skills 仓库: ${repoRoot}`);
+    log.success(`已记录远端仓库: ${remoteUrl ?? '(无)'}`);
 
     // 6. 同步 skill-lock.json（pull/push/merge/初始化）
     log.info('同步 skill-lock.json...');
-    await syncSkillLock(repoRoot!);
+    await syncSkillLock(repoRoot);
 
     console.log();
 
     // 7. 安装 skills 到当前设备
     log.info('安装手写 skills...');
-    const skills = scanSkills(repoRoot!);
+    const skills = scanSkills(repoRoot);
     if (skills.length === 0) {
       log.warn('skills/ 目录下暂无技能，跳过安装');
     } else {

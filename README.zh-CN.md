@@ -10,7 +10,7 @@
 
 ## 核心思路
 
-1. **skills 仓库由你定义** —— skills 放在**你自己指定**的 git 仓库的 `skills/` 目录下。`ss init <仓库地址>` 会把仓库 clone 到每台设备统一的目录 `~/.config/skills-skills/sync-repo/`（重复执行幂等复用），随后创建 `skills/` 并预置默认的 `skills-skills` 技能。
+1. **skills 仓库由你定义** —— skills 放在**你自己指定**的 git 仓库的 `skills/` 目录下。`ss init <仓库地址>` 会把仓库 clone 到每台设备统一的目录 `~/.config/skills-skills/skill-sync-repo`（重复执行幂等复用），随后创建 `skills/` 并预置默认的 `skills-skills` 技能。
 2. **skill-lock.json 双真实文件** —— 本地一份真实文件（`~/.agents/.skill-lock.json`）+ 仓库一份受版本控制的文件（`<repo>/skill-lock.json`）。`ss` 用 git 风格的 `diff` / `merge` / `pull` / `push` 三方合并来保持两边一致。
 
 ```
@@ -34,7 +34,7 @@ npm install -g skills-skills   # 同时提供 ss / skills-skills 两个命令
 ## 快速开始
 
 ```bash
-# 复用当前 git 仓库，或把给定仓库地址 clone 到统一 sync-repo 目录
+# 把给定仓库地址 clone 到统一目录
 ss init <你的仓库地址>
 ```
 
@@ -42,7 +42,7 @@ ss init <你的仓库地址>
 
 | 命令 | 说明 |
 |------|------|
-| `ss init [url]` | 初始化：把 `url` clone 到统一目录 `~/.config/skills-skills/sync-repo/`（幂等），随后同步并安装。别名为 `ss setup`（兼容老版本） |
+| `ss init [url]` | 初始化：把 `url` clone 到统一目录 `~/.config/skills-skills/skill-sync-repo`（幂等），随后同步并安装。别名为 `ss setup`（兼容老版本） |
 | `ss diff [--json]` | 比较本地与仓库的 `skill-lock.json`（按 skill key 语义对比） |
 | `ss merge [--ours\|--theirs]` | 三方合并本地与仓库（base = 上次同步基线）；有冲突默认中止，可用一侧强制解决 |
 | `ss pull` | 仓库 → 本地（覆盖前自动备份） |
@@ -90,9 +90,9 @@ skills-skills/
 └── package.json
 
 ~/.config/skills-skills/
-├── config.json           # repoRoot / remoteUrl / repoName
+├── config.json           # remoteUrl
 ├── last-sync.json        # 三方合并基线
-└── sync-repo/<repoName>/ # ss init <url> 的统一 clone 目录
+└── skill-sync-repo/      # 仓库本身（ss init <url> 的统一 clone 目标）
 
 ~/.agents/.skill-lock.json # 本工具维护的本地真实锁文件
 ```
@@ -112,4 +112,5 @@ VS Code 中 F5 → 选择 "Debug ss (tsx)" 即可直接调试 TypeScript 源码�
 ## 注意事项
 
 - `skill-lock.json` 含本地路径信息，建议仓库设为 **私有**。
+- `ss init` 会先检查系统依赖：自动检测 `git` 与 `npx skills` 是否可用，缺失时给出安装指引。
 - 依赖 `npx skills`（OpenCLI 生态提供），请确保设备已安装相关工具。

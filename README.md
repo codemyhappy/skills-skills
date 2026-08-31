@@ -10,7 +10,7 @@ Manage your handwritten skills and `skill-lock.json` in one place, so every devi
 
 ## Core Idea
 
-1. **Your own skills repo** — skills live in the `skills/` directory of a git repo *you* define. `ss init <url>` clones the repo into the unified per-device directory `~/.config/skills-skills/sync-repo/` (idempotent: re-uses an existing clone), then creates `skills/` and pre-seeds the default `skills-skills` skill.
+1. **Your own skills repo** — skills live in the `skills/` directory of a git repo *you* define. `ss init <url>` clones the repo directly into the unified per-device location `~/.config/skills-skills/skill-sync-repo` (idempotent: re-uses an existing clone), then creates `skills/` and pre-seeds the default `skills-skills` skill.
 2. **skill-lock.json as two real files** — a real file on this device (`~/.agents/.skill-lock.json`) and a version-controlled copy in the repo (`<repo>/skill-lock.json`). `ss` keeps them in sync with git-style `diff` / `merge` / `pull` / `push` three-way merge.
 
 ```
@@ -34,7 +34,7 @@ npm install -g skills-skills   # also provides the `ss` alias
 ## Quick Start
 
 ```bash
-# Reuse the current git project, or clone the given repo URL into the unified sync-repo dir
+# Clone the given repo URL directly into the unified per-device repo dir
 ss init <your-repo-url>
 ```
 
@@ -42,7 +42,7 @@ Daily use:
 
 | Command | Description |
 |---------|-------------|
-| `ss init [url]` | Initialize: clone `url` into the unified `~/.config/skills-skills/sync-repo/` dir (idempotent), then sync & install. Alias: `ss setup` (legacy compat) |
+| `ss init [url]` | Initialize: clone `url` directly into `~/.config/skills-skills/skill-sync-repo` (idempotent), then sync & install. Alias: `ss setup` (legacy compat) |
 | `ss diff [--json]` | Compare local vs repo `skill-lock.json` (per-skill key semantics) |
 | `ss merge [--ours\|--theirs]` | Three-way merge local & repo (base = last sync); conflict aborts unless a side is forced |
 | `ss pull` | Copy repo `skill-lock.json` to local (auto backup before overwrite) |
@@ -90,9 +90,9 @@ skills-skills/
 └── package.json
 
 ~/.config/skills-skills/
-├── config.json            # repoRoot / remoteUrl / repoName
+├── config.json            # remoteUrl
 ├── last-sync.json         # three-way merge base
-└── sync-repo/<repoName>/  # unified clone directory for `ss init <url>`
+└── skill-sync-repo/       # the repo itself — unified clone destination for `ss init <url>`
 
 ~/.agents/.skill-lock.json # local real lock file handled by this tool
 ```
@@ -112,4 +112,5 @@ Press F5 → select "Debug ss (tsx)" in VS Code to debug TypeScript directly; bu
 ## Notes
 
 - `skill-lock.json` contains local paths — keep this repo **private**.
+- `ss init` checks the environment first: it verifies `git` and `npx skills` are available and prints install hints if missing.
 - Depends on `npx skills` (from the OpenCLI ecosystem) — make sure it's installed.

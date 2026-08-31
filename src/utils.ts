@@ -18,12 +18,8 @@ const CONFIG_DIR = join(homedir(), '.config', 'skills-skills');
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
 
 export interface Config {
-  /** 用户自定义的 skills 仓库根目录 */
-  repoRoot?: string;
-  /** 远端仓库地址（init 时记录，用于提示 push/pull） */
+  /** 远端仓库地址（init 时记录，仅用于展示/提示，无需用户手动维护） */
   remoteUrl?: string;
-  /** 仓库目录名（clone 到 sync-repo/<repoName>） */
-  repoName?: string;
 }
 
 /** 读取本地配置 */
@@ -60,15 +56,13 @@ export function getGitRoot(dir: string): string {
 }
 
 /**
- * 解析当前 skills 仓库根目录：
- * 仅读取本地 config 中记录的 repoRoot（由 ss init 写入，
- * 统一位于 ~/.config/skills-skills/sync-repo/<repoName>，与执行目录无关）；
+ * 解析当前 skills 仓库根目录：固定的统一目录
+ * ~/.config/skills-skills/skill-sync-repo（存在即视为仓库根，与 config 内容无关）。
  * 未初始化时返回 null（需要先运行 ss init）。
  */
 export function getRepoRoot(): string | null {
-  const cfg = readConfig();
-  if (cfg.repoRoot && existsSync(cfg.repoRoot)) return cfg.repoRoot;
-  return null;
+  const dir = getSkillSyncRepoDir();
+  return existsSync(dir) ? dir : null;
 }
 
 // ── 派生路径 ──────────────────────────────────────────
@@ -87,20 +81,9 @@ export function getSkillsDir(repoRoot: string): string {
   return resolve(repoRoot, 'skills');
 }
 
-/** 从仓库 URL 中提取目录名（如 https://gitee.com/a/b.git → b） */
-export function repoNameFromUrl(url: string): string {
-  const cleaned = url.replace(/\.git$/, '').replace(/\/$/, '');
-  return cleaned.split('/').pop() || 'skills';
-}
-
-/** 统一 clone 目录：~/.config/skills-skills/sync-repo */
-export function getSyncDir(): string {
-  return join(CONFIG_DIR, 'sync-repo');
-}
-
-/** 指定仓库 clone 后的目录：sync-repo/<repoName> */
-export function getRepoClonePath(repoName: string): string {
-  return resolve(getSyncDir(), repoName);
+/** 统一 clone 目录（也是仓库根）：~/.config/skills-skills/skill-sync-repo */
+export function getSkillSyncRepoDir(): string {
+  return join(CONFIG_DIR, 'skill-sync-repo');
 }
 
 /** 三方合并基线 last-sync.json 的绝对路径 */
