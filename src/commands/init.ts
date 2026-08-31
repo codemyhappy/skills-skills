@@ -28,16 +28,6 @@ function cloneRepo(url: string, dest: string): string {
   return dest;
 }
 
-/** 交互选择输出语言（zh/en，默认 zh） */
-async function promptLang(): Promise<'zh' | 'en'> {
-  const rl = readline.createInterface({ input, output });
-  const answer = (
-    await rl.question('请选择输出语言 / Select language (zh/en) [zh]: ')
-  ).trim().toLowerCase();
-  rl.close();
-  return answer === 'en' ? 'en' : 'zh';
-}
-
 /** 非交互环境下用 readline 询问 git 仓库地址 */
 async function promptGitUrl(): Promise<string> {
   const rl = readline.createInterface({ input, output });
@@ -161,15 +151,15 @@ function ensureGuideFile(repoRoot: string, fileName: string, existsZh: string, e
  * 提供 url（位置参数或交互询问）→ clone 到该统一目录；目录已存在且为 git 仓库则幂等复用。
  * 校验（只读）全部通过后才执行写入。
  */
-export async function initCommand(options: { url?: string; lang?: string }) {
+export async function initCommand(options: { url?: string }) {
   log.title({ zh: '🚀 初始化 skills 仓库', en: '🚀 Initialize skills repo' });
 
   // ═══ 校验段：只读、零副作用 ═══
-  // 0) 选取输出语言并写入 config（zh/en，默认 zh）
-  const selectedLang: 'zh' | 'en' =
-    options.lang === 'en' ? 'en' : options.lang === 'zh' ? 'zh' : await promptLang();
-  writeConfig({ ...readConfig(), lang: selectedLang });
-  log.info({ zh: `输出语言: ${selectedLang === 'zh' ? '中文' : 'English'}`, en: `Output language: ${selectedLang === 'zh' ? 'Chinese' : 'English'}` });
+  // 0) 提示当前语言（修改请先运行 ss config --lang <zh|en>）
+  log.info({
+    zh: `输出语言: ${getLang() === 'en' ? 'English' : '中文'}（修改请运行 ss config --lang <zh|en>）`,
+    en: `Output language: ${getLang() === 'en' ? 'English' : 'Chinese'} (change with ss config --lang <zh|en>)`,
+  });
 
   // 1) 系统依赖（git / npx）检测
   precheckDependencies();
@@ -232,8 +222,8 @@ export async function initCommand(options: { url?: string; lang?: string }) {
     log.info({ zh: '记录仓库配置...', en: 'Saving repo config...' });
     const remoteUrl = cloneUrl ?? getRemoteUrl(repoRoot);
     writeConfig({
+      ...readConfig(),
       remoteUrl,
-      lang: selectedLang,
     });
     log.success({ zh: `已记录远端仓库: ${remoteUrl ?? '(无)'}`, en: `Remote repo saved: ${remoteUrl ?? '(none)'}` });
 

@@ -13,6 +13,7 @@ import {
 } from './commands/sync.js';
 import { installCommand, listCommand } from './commands/install.js';
 import { initCommand } from './commands/init.js';
+import { configCommand } from './commands/config.js';
 import { getLang } from './utils.js';
 
 // ── 读取 package.json 获取版本号 ──────────────────────
@@ -30,36 +31,42 @@ const USAGE_GUIDE = zh
   ? `
 📖 使用指南
 
-1. 初始化（每台设备执行一次）
+1. 切换输出语言（可选，默认中文）
+   ss config --lang=en    # 改为英文输出
+
+2. 初始化（每台设备执行一次）
    ss init <你的仓库地址>
 
-2. 同步 skill-lock.json
+3. 同步 skill-lock.json
    ss push        # 改动本机环境后执行：本地写入仓库（随后 git commit/push）
    ss pull        # 其他设备有更新后执行：仓库写回本地
 
-3. 差异与合并
+4. 差异与合并
    ss diff        # 查看本地与仓库的差异
    ss merge       # 自动合并；冲突时按提示加 --ours 或 --theirs
 
-4. 管理技能
+5. 管理技能
    ss install [名称]   # 安装技能到本机
    ss list             # 列出所有手写技能
 `
   : `
 📖 Usage Guide
 
-1. Init (once per device)
+1. Switch language (optional, default Chinese)
+   ss config --lang=en    # switch to English
+
+2. Init (once per device)
    ss init <your-repo-url>
 
-2. Sync skill-lock.json
+3. Sync skill-lock.json
    ss push        # after local changes: local → repo (then git commit/push)
    ss pull        # after other devices updated: repo → local
 
-3. Diff & merge
+4. Diff & merge
    ss diff        # show differences between local and repo
    ss merge       # auto merge; use --ours or --theirs on conflict
 
-4. Manage skills
+5. Manage skills
    ss install [name]   # install skills on this device
    ss list             # list all handwritten skills
 `;
@@ -88,9 +95,21 @@ program
       : 'Initialize: clone repo into ~/.config/skills-skills/skill-sync-repo & sync skill-lock.json (alias setup)',
   )
   .argument('[url]', zh ? 'skills git 仓库地址' : 'skills git repo URL')
-  .option('--lang <zh|en>', zh ? '输出语言：zh 中文 / en English' : 'Output language: zh / en')
-  .action(async (url, options) => {
-    await initCommand({ url, lang: options.lang });
+  .action(async (url) => {
+    await initCommand({ url });
+  });
+
+// ss config — 查看或修改配置
+program
+  .command('config')
+  .description(
+    zh
+      ? '查看或修改本地 ss 配置（语言、远端仓库等）'
+      : 'Show or modify local ss config (language, remote URL, etc.)',
+  )
+  .option('--lang <zh|en>', zh ? '设置输出语言（zh 中文 / en English）' : 'Set output language (zh / en)')
+  .action(async (options) => {
+    await configCommand({ lang: options.lang });
   });
 
 // ss sync

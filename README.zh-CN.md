@@ -38,7 +38,7 @@ npm install -g skills-skills   # 同时提供 ss / skills-skills 两个命令
 ss init <你的仓库地址>
 ```
 
-> `ss init` 会询问选择输出语言（中文 / English），并保存到 `~/.config/skills-skills/config.json`（`lang` 字段）。可用 `--lang zh` 或 `--lang en` 跳过询问；所有命令都会按该语言输出。
+> 所有 `ss` 命令按 `~/.config/skills-skills/config.json` 中 `lang` 字段（默认 `zh`）输出。随时可用 `ss config --lang en`（或 `zh`）切换；`ss init` 不再交互询问。
 
 日常使用：
 
@@ -51,6 +51,7 @@ ss init <你的仓库地址>
 | `ss push` | 本地 → 仓库（覆盖前自动备份），随后自行 `git commit` / `git push` |
 | `ss sync` | 自动三方合并（等价 `ss merge`） |
 | `ss status` | 查看同步状态摘要 |
+| `ss config [--lang <zh\|en>]` | 查看或修改本地配置（输出语言等） |
 | `ss install [<name>]` | 安装所有（或指定）手写 skill |
 | `ss list` | 列出所有手写 skills |
 | `ss -V` | 版本号 |

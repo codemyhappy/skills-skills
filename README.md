@@ -38,7 +38,7 @@ npm install -g skills-skills   # also provides the `ss` alias
 ss init <your-repo-url>
 ```
 
-> `ss init` asks you to pick an output language (Chinese / English) and saves it to `~/.config/skills-skills/config.json` (`lang`). Pass `--lang zh` or `--lang en` to skip the prompt. All commands respect this language.
+> All `ss` commands respect the output language saved in `~/.config/skills-skills/config.json` (`lang`, defaults to `zh`). Switch any time with `ss config --lang en` (or `zh`). No interactive prompt in `ss init`.
 
 Daily use:
 
@@ -51,6 +51,7 @@ Daily use:
 | `ss push` | Copy local to repo (auto backup before overwrite), then `git commit` / `git push` manually |
 | `ss sync` | Auto three-way merge (same as `ss merge`) |
 | `ss status` | Show sync state summary |
+| `ss config [--lang <zh\|en>]` | Show or modify local config (output language, etc.) |
 | `ss install [<name>]` | Install all (or a specific) handwritten skill |
 | `ss list` | List all handwritten skills |
 | `ss -V` | Print version |
