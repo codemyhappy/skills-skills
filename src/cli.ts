@@ -39,6 +39,7 @@ const USAGE_GUIDE = zh
 
 3. 同步 skill-lock.json
    ss push        # 改动本机环境后执行：本地写入仓库（随后 git commit/push）
+   ss push --remote       # 省一步：直接提交并推送到远端
    ss pull        # 其他设备有更新后执行：仓库写回本地
 
 4. 差异与合并
@@ -49,8 +50,7 @@ const USAGE_GUIDE = zh
    ss install [名称]   # 安装技能到本机
    ss list             # 列出所有手写技能
 `
-  : `
-📖 Usage Guide
+     : `
 
 1. Switch language (optional, default Chinese)
    ss config --lang=en    # switch to English
@@ -58,8 +58,9 @@ const USAGE_GUIDE = zh
 2. Init (once per device)
    ss init <your-repo-url>
 
-3. Sync skill-lock.json
+   3. Sync skill-lock.json
    ss push        # after local changes: local → repo (then git commit/push)
+   ss push --remote       # one-shot: auto commit & push to remote
    ss pull        # after other devices updated: repo → local
 
 4. Diff & merge
@@ -155,10 +156,13 @@ program
 program
   .command('push')
   .description(
-    zh ? '将本地 skill-lock.json 推送到仓库（覆盖前自动备份），随后自行 git commit/push' : 'Push local skill-lock.json to repo (auto backup), then git commit/push on your own',
+    zh
+      ? '将本地 skill-lock.json 推送到仓库（覆盖前自动备份）。加 --remote 可直接提交并推送到远端'
+      : 'Push local skill-lock.json to repo (auto backup). Add --remote to auto commit & push to remote',
   )
-  .action(async () => {
-    await pushCommand();
+  .option('-r, --remote', zh ? '推送后自动执行 git add / commit / push' : 'Auto git add/commit/push after writing')
+  .action(async (options) => {
+    await pushCommand({ remote: options.remote });
   });
 
 // ss status

@@ -50,7 +50,7 @@ Daily use:
 | `ss diff [--json]` | Compare local vs repo `skill-lock.json` (per-skill key semantics) |
 | `ss merge [--ours\|--theirs]` | Three-way merge local & repo (base = last sync); conflict aborts unless a side is forced |
 | `ss pull` | Copy repo `skill-lock.json` to local (auto backup before overwrite) |
-| `ss push` | Copy local to repo (auto backup before overwrite), then `git commit` / `git push` manually |
+| `ss push [--remote]` | Copy local to repo (auto backup before overwrite); add `--remote` to auto `git add` / `commit` / `git push` |
 | `ss sync` | Auto three-way merge (same as `ss merge`) |
 | `ss status` | Show sync state summary |
 | `ss config [--lang <zh\|en>]` | Show or modify local config (output language, etc.) |

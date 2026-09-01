@@ -8,10 +8,12 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { execSync } from 'node:child_process';
 import {
   getAgentSkillLockPath,
   getRepoSKillLockPath,
   getRepoRoot,
+  getLang,
   log,
   pathExists,
   readConfig,
@@ -248,7 +250,7 @@ export async function pullCommand(): Promise<void> {
 }
 
 /** 推送：本地 → 仓库真实文件（写前备份仓库），随后提示 git 提交 */
-export async function pushCommand(): Promise<void> {
+export async function pushCommand(options: { remote?: boolean } = {}): Promise<void> {
   const repoRoot = resolveRepoRoot();
   const agentPath = getAgentSkillLockPath();
   const repoPath = getRepoSKillLockPath(repoRoot);
@@ -271,10 +273,65 @@ export async function pushCommand(): Promise<void> {
     zh: `已推送本地 skill-lock.json 到仓库${bak ? `（原仓库文件备份: ${bak}）` : ''}`,
     en: `Pushed local skill-lock.json to repo${bak ? ` (repo file backed up: ${bak})` : ''}`,
   });
-  log.info({
-    zh: '提示：请执行 git add skill-lock.json && git commit && git push 将变更同步到远端',
-    en: 'Hint: run git add skill-lock.json && git commit && git push to sync to remote',
-  });
+
+  // --remote / -r：自动 git add + commit + push
+  if (options.remote) {
+    gitCommitPush(repoRoot);
+  } else {
+    log.info({
+      zh: '提示：运行 ss push --remote 自动提交并推送到远端',
+      en: 'Hint: run ss push --remote to auto commit & push to remote',
+    });
+  }
+}
+
+/** 在仓库内执行 git add skill-lock.json + git commit + git push（自动提交） */
+function gitCommitPush(repoRoot: string): void {
+  const lang = getLang();
+  // git 本地身份兜底（避免 commit 失败于缺少 user.name/user.email）
+  const env = {
+    ...process.env,
+    GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'ss',
+    GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || 'ss@local',
+    GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'ss',
+    GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || 'ss@local',
+    GIT_TERMINAL_PROMPT: '0',
+  };
+
+  log.info({ zh: '提交并推送到远端...', en: 'Committing and pushing to remote...' });
+
+  // 1) 把 skill-lock.json 暂存
+  execSync('git add skill-lock.json', { cwd: repoRoot, stdio: 'inherit', env });
+
+  // 2) 判断暂存区是否有变更：`git diff --quiet --cached` 在有差异时 exit 1，无差异时 exit 0
+  let hasChange = false;
+  try {
+    execSync('git diff --quiet --cached -- skill-lock.json', { cwd: repoRoot, stdio: 'pipe', env });
+    // exit 0 → 无暂存变更
+  } catch {
+    hasChange = true; // exit 1 → 有变更
+  }
+
+  if (!hasChange) {
+    log.info({ zh: '暂存区无变更，跳过提交', en: 'No staged changes, skipping commit' });
+  } else {
+    const msg = lang === 'en' ? 'sync: update skill-lock.json' : 'sync: 更新 skill-lock.json';
+    // 3) 提交（-m 避免打开编辑器）
+    execSync(`git commit -m ${JSON.stringify(msg)}`, { cwd: repoRoot, stdio: 'inherit', env });
+  }
+
+  // 4) 推送到 origin
+  try {
+    execSync('git push', { cwd: repoRoot, stdio: 'inherit', env });
+    log.success({ zh: '已提交并推送到远端 🎉', en: 'Committed and pushed to remote 🎉' });
+  } catch (err: any) {
+    log.error({ zh: `推送到远端失败: ${err?.message ?? err}`, en: `Push to remote failed: ${err?.message ?? err}` });
+    log.info({
+      zh: '可以手动执行: git push',
+      en: 'You can do it manually: git push',
+    });
+    process.exit(1);
+  }
 }
 
 /**

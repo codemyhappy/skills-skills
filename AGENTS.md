@@ -22,7 +22,7 @@
 | `ss diff [--json]` | key 级差异：`+` 仅本地 / `-` 仅仓库 / `M` 均改不同 |
 | `ss merge [--ours\|--theirs]` | 三方合并；冲突默认中止，可强制取一侧 |
 | `ss pull` | 仓库 → 本地（覆盖前时间戳备份） |
-| `ss push` | 本地 → 仓库（覆盖前时间戳备份），提示 git 提交 |
+| `ss push [-r]` | 本地 → 仓库（覆盖前自动备份），自动提交到远端 |
 | `ss status` | 同步状态摘要 |
 | `ss config [--lang <zh\|en>]` | 查看或修改本地配置（输出语言等） |
 | `ss install [name]` / `ss list` | 技能安装 / 列表 |

@@ -50,7 +50,7 @@ ss init <你的仓库地址>
 | `ss diff [--json]` | 比较本地与仓库的 `skill-lock.json`（按 skill key 语义对比） |
 | `ss merge [--ours\|--theirs]` | 三方合并本地与仓库（base = 上次同步基线）；有冲突默认中止，可用一侧强制解决 |
 | `ss pull` | 仓库 → 本地（覆盖前自动备份） |
-| `ss push` | 本地 → 仓库（覆盖前自动备份），随后自行 `git commit` / `git push` |
+| `ss push [--remote]` | 本地 → 仓库（覆盖前自动备份）；加 `--remote` 可直接 `git add` / `commit` / `git push` |
 | `ss sync` | 自动三方合并（等价 `ss merge`） |
 | `ss status` | 查看同步状态摘要 |
 | `ss config [--lang <zh\|en>]` | 查看或修改本地配置（输出语言等） |
