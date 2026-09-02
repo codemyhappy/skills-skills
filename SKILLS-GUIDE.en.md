@@ -36,6 +36,7 @@ ss init <your-repo-url>
 
 ```bash
 ss push     # after local changes: local lock → repo (then git commit / push)
+ss push -r  # one-shot: stage all → list → confirm → commit & push
 ss pull     # after other devices updated: repo lock → local
 ss diff     # show differences between local and repo
 ss merge    # auto three-way merge (add --ours or --theirs to force one side on conflict)

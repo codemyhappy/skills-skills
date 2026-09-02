@@ -39,7 +39,7 @@ const USAGE_GUIDE = zh
 
 3. 同步 skill-lock.json
    ss push        # 改动本机环境后执行：本地写入仓库（随后 git commit/push）
-   ss push --remote       # 省一步：直接提交并推送到远端
+   ss push -r        # 一步到位：本地 → 仓库 → 列出改动并确认后提交推送到远端
    ss pull        # 其他设备有更新后执行：仓库写回本地
 
 4. 差异与合并
@@ -60,7 +60,7 @@ const USAGE_GUIDE = zh
 
    3. Sync skill-lock.json
    ss push        # after local changes: local → repo (then git commit/push)
-   ss push --remote       # one-shot: auto commit & push to remote
+   ss push -r        # one-shot: local → repo → list & confirm → commit & push
    ss pull        # after other devices updated: repo → local
 
 4. Diff & merge

@@ -9,6 +9,8 @@ import {
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
+import readline from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
 import {
   getAgentSkillLockPath,
   getRepoSKillLockPath,
@@ -274,9 +276,9 @@ export async function pushCommand(options: { remote?: boolean } = {}): Promise<v
     en: `Pushed local skill-lock.json to repo${bak ? ` (repo file backed up: ${bak})` : ''}`,
   });
 
-  // --remote / -r：自动 git add + commit + push
+  // --remote / -r：暂存全量变更 → 列出文件 → 确认后提交并推送
   if (options.remote) {
-    gitCommitPush(repoRoot);
+    await interactCommitPush(repoRoot);
   } else {
     log.info({
       zh: '提示：运行 ss push --remote 自动提交并推送到远端',
@@ -285,8 +287,11 @@ export async function pushCommand(options: { remote?: boolean } = {}): Promise<v
   }
 }
 
-/** 在仓库内执行 git add skill-lock.json + git commit + git push（自动提交） */
-function gitCommitPush(repoRoot: string): void {
+/**
+ * 交互式提交并推送：先用只读命令列出仓库全部变更（不执行任何 git 写操作），
+ * 等待用户确认后才 git add -A + commit + push。
+ */
+async function interactCommitPush(repoRoot: string): Promise<void> {
   const lang = getLang();
   // git 本地身份兜底（避免 commit 失败于缺少 user.name/user.email）
   const env = {
@@ -298,37 +303,59 @@ function gitCommitPush(repoRoot: string): void {
     GIT_TERMINAL_PROMPT: '0',
   };
 
-  log.info({ zh: '提交并推送到远端...', en: 'Committing and pushing to remote...' });
+  log.info({ zh: '扫描仓库变更（只读）...', en: 'Scanning repo changes (read-only)...' });
 
-  // 1) 把 skill-lock.json 暂存
-  execSync('git add skill-lock.json', { cwd: repoRoot, stdio: 'inherit', env });
-
-  // 2) 判断暂存区是否有变更：`git diff --quiet --cached` 在有差异时 exit 1，无差异时 exit 0
-  let hasChange = false;
+  // 1) 只读列出变更（-uall 展开未跟踪目录，逐个列出全部文件），不动 index
+  let changedLines: string[] = [];
   try {
-    execSync('git diff --quiet --cached -- skill-lock.json', { cwd: repoRoot, stdio: 'pipe', env });
-    // exit 0 → 无暂存变更
+    const out = execSync('git status --short -uall', { cwd: repoRoot, stdio: 'pipe', env }).toString();
+    changedLines = out.split('\n').map(l => l.trimEnd()).filter(l => l.trim());
   } catch {
-    hasChange = true; // exit 1 → 有变更
+    /* 无变更或非仓库，保持空数组 */
   }
 
-  if (!hasChange) {
-    log.info({ zh: '暂存区无变更，跳过提交', en: 'No staged changes, skipping commit' });
-  } else {
-    const msg = lang === 'en' ? 'sync: update skill-lock.json' : 'sync: 更新 skill-lock.json';
-    // 3) 提交（-m 避免打开编辑器）
-    execSync(`git commit -m ${JSON.stringify(msg)}`, { cwd: repoRoot, stdio: 'inherit', env });
+  if (changedLines.length === 0) {
+    log.info({ zh: '没有需要提交的变更，跳过', en: 'No changes to commit, skipping' });
+    return;
   }
 
-  // 4) 推送到 origin
+  // 2) 展示待提交清单
+  log.title({
+    zh: `📦 将提交 ${changedLines.length} 个文件`,
+    en: `📦 ${changedLines.length} file(s) to commit`,
+  });
+  console.log();
+  for (const line of changedLines) {
+    log.dim(`  ${line}`);
+  }
+  console.log();
+
+  // 3) 等用户确认后再执行任何 git 写操作
+  const rl = readline.createInterface({ input, output });
+  const answer = (
+    await rl.question(
+      lang === 'en' ? 'Confirm commit & push to remote? [y/N] ' : '确认提交并推送到远端？[y/N] ',
+    )
+  ).trim().toLowerCase();
+  rl.close();
+
+  if (answer !== 'y' && answer !== 'yes') {
+    log.warn({ zh: '已取消，未做任何 git 操作', en: 'Cancelled — no git operations performed' });
+    process.exit(1);
+  }
+
+  // 4) 确认后：暂存全部变更 → 提交 → 推送
+  const msg = lang === 'en' ? 'sync: update skills' : 'sync: 更新 skills';
   try {
+    execSync('git add -A', { cwd: repoRoot, stdio: 'inherit', env });
+    execSync(`git commit -m ${JSON.stringify(msg)}`, { cwd: repoRoot, stdio: 'inherit', env });
     execSync('git push', { cwd: repoRoot, stdio: 'inherit', env });
     log.success({ zh: '已提交并推送到远端 🎉', en: 'Committed and pushed to remote 🎉' });
   } catch (err: any) {
-    log.error({ zh: `推送到远端失败: ${err?.message ?? err}`, en: `Push to remote failed: ${err?.message ?? err}` });
+    log.error({ zh: `git 操作失败: ${err?.message ?? err}`, en: `Git operation failed: ${err?.message ?? err}` });
     log.info({
-      zh: '可以手动执行: git push',
-      en: 'You can do it manually: git push',
+      zh: '可以手动执行: git add -A && git commit -m "sync" && git push',
+      en: 'You can do it manually: git add -A && git commit -m "sync" && git push',
     });
     process.exit(1);
   }

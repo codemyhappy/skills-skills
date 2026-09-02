@@ -39,6 +39,7 @@ ss init <你的仓库地址>
 
 ```bash
 ss push     # 本机环境有改动时：本地 lock 写入仓库（随后 git commit / push）
+ss push -r  # 一步到位：暂存全部变更→列出清单→确认→提交推送
 ss pull     # 其他设备有更新时：仓库 lock 写回本地
 ss diff     # 查看本地与仓库的差异
 ss merge    # 自动三方合并（冲突时加 --ours 或 --theirs 强制取一侧）

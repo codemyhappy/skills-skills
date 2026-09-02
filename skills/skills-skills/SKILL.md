@@ -29,7 +29,7 @@ description: 手写 skills 环境管理工具 ss 的使用指南。当用户想�
 | `ss diff [--json]` | key 级差异：`+` 仅本地 / `-` 仅仓库 / `M` 均改不同 |
 | `ss merge [--ours\|--theirs]` | 三方合并；冲突默认中止，可用一侧强制解决 |
 | `ss pull` | 仓库 → 本地（覆盖前时间戳备份） |
-| `ss push [-r]` | 本地 → 仓库（覆盖前自动备份）；加 `-r` 直接 git add/commit/push 到远端 |
+| `ss push [-r]` | 本地 → 仓库（覆盖前自动备份）；`-r` 暂存全部变更、列出清单并确认后提交到远端 |
 | `ss status` | 同步状态摘要 |
 | `ss config [--lang <zh\|en>]` | 查看或修改配置（输出语言中英切换） |
 | `ss install [name]` / `ss list` | 安装技能到本机 / 列出技能（含 lock 里的技能） |
@@ -40,7 +40,7 @@ description: 手写 skills 环境管理工具 ss 的使用指南。当用户想�
 - 本机 skills 环境改了（skill-lock.json 有变化），想同步给其他设备：
   ```
   ss push           # 本地 → 仓库，然后按提示手动 git commit/push
-  ss push -r        # 一步到位：本地 → 仓库 → 自动提交推送到远端
+  ss push -r        # 一步到位：本地 → 仓库 → 列出改动并确认后自动提交推送到远端
   ```
 - 其他设备更新过，本机要拉取：
   ```
