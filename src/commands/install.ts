@@ -192,7 +192,7 @@ export async function installCommand(options: { skill?: string; dryRun?: boolean
 
     try {
       log.info({ zh: `安装: ${skill.name}`, en: `Installing: ${skill.name}` });
-      execSync(`npx skills add "${skill.path}"`, {
+      execSync(`npx skills add "${skill.path}" -y -g`, {
         stdio: 'inherit',
         cwd: repoRoot,
       });
