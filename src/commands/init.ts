@@ -331,16 +331,7 @@ export async function initCommand(options: { url?: string }) {
     log.info({ zh: '同步 skill-lock.json...', en: 'Syncing skill-lock.json...' });
     await syncSkillLock(repoRoot);
 
-    console.log();
 
-    // 7. 安装 skills 到当前设备
-    log.info({ zh: '安装手写 skills...', en: 'Installing handwritten skills...' });
-    const skills = scanSkills(repoRoot);
-    if (skills.length === 0) {
-      log.warn({ zh: 'skills/ 目录下暂无技能，跳过安装', en: 'No skills found in skills/, skipping install' });
-    } else {
-      await installCommand({ dryRun: false });
-    }
   } catch (err: any) {
     // 执行段出错：若刚 clone 出目录则清理，避免残留半成品
     log.error({ zh: `初始化失败: ${err?.message ?? err}`, en: `Init failed: ${err?.message ?? err}` });
