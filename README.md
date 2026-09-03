@@ -1,5 +1,12 @@
 # skills-skills 🧰
 
+[![npm version](https://img.shields.io/npm/v/skills-skills.svg)](https://www.npmjs.com/package/skills-skills)
+[![npm downloads](https://img.shields.io/npm/dm/skills-skills.svg)](https://www.npmjs.com/package/skills-skills)
+[![License: MIT](https://img.shields.io/npm/l/skills-skills.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/codemyhappy/skills-skills.svg)](https://github.com/codemyhappy/skills-skills)
+
+**[GitHub](https://github.com/codemyhappy/skills-skills) · [npm](https://www.npmjs.com/package/skills-skills)**
+
 The **skills-skills** (`ss`) CLI — personal skills manager. **Write once, sync everywhere, version-controlled**.
 
 Manage your handwritten skills and `skill-lock.json` in one place, so every device has an identical skills environment.
